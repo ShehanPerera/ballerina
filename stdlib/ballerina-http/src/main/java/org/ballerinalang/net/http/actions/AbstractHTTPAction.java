@@ -47,6 +47,7 @@ import org.wso2.transport.http.netty.contract.ClientConnectorException;
 import org.wso2.transport.http.netty.contract.HttpClientConnector;
 import org.wso2.transport.http.netty.contract.HttpConnectorListener;
 import org.wso2.transport.http.netty.contract.HttpResponseFuture;
+import org.wso2.transport.http.netty.exception.EndpointTimeOutException;
 import org.wso2.transport.http.netty.message.HTTPCarbonMessage;
 import org.wso2.transport.http.netty.message.HttpMessageDataStreamer;
 
@@ -397,17 +398,24 @@ public abstract class AbstractHTTPAction extends AbstractNativeAction {
         }
 
         private void notifyError(Throwable throwable) {
-            BStruct httpConnectorError = createStruct(context, HttpConstants.HTTP_CONNECTOR_ERROR, HttpConstants
-                    .PROTOCOL_PACKAGE_HTTP);
+            BStruct httpConnectorError;
+
+            if (throwable instanceof EndpointTimeOutException) {
+                httpConnectorError = createStruct(context, HttpConstants.HTTP_TIMEOUT_ERROR,
+                        HttpConstants.PROTOCOL_PACKAGE_HTTP);
+            } else {
+                httpConnectorError = createStruct(context, HttpConstants.HTTP_CONNECTOR_ERROR,
+                        HttpConstants.PROTOCOL_PACKAGE_HTTP);
+            }
+
             httpConnectorError.setStringField(0, throwable.getMessage());
+
             if (throwable instanceof ClientConnectorException) {
                 ClientConnectorException clientConnectorException = (ClientConnectorException) throwable;
                 httpConnectorError.setIntField(0, clientConnectorException.getHttpStatusCode());
             }
 
             ballerinaFuture.notifyReply(null, httpConnectorError);
-            // todo: can we trigger trigger notifyFailure, instead?
-            // ballerinaFuture.notifyFailure(new BallerinaConnectorException(throwable));
         }
 
         private BStruct createStruct(Context context, String structName, String protocolPackage) {
