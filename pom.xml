@@ -181,6 +181,11 @@
             </dependency>
             <dependency>
                 <groupId>org.ballerinalang</groupId>
+                <artifactId>ballerina-metrics</artifactId>
+                <version>${ballerina.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.ballerinalang</groupId>
                 <artifactId>ballerina-builtin</artifactId>
                 <version>${ballerina.version}</version>
             </dependency>
@@ -780,6 +785,7 @@
                 <module>stdlib/ballerina-config</module>
                 <module>stdlib/ballerina-http</module>
                 <module>stdlib/observability/ballerina-trace</module>
+                <module>stdlib/observability/ballerina-metrics</module>
                 <module>stdlib/ballerina-mime</module>
 
                 <module>bvm/ballerina-core</module>
@@ -817,6 +823,7 @@
                 <module>stdlib/ballerina-config</module>
                 <module>stdlib/ballerina-http</module>
                 <module>stdlib/observability/ballerina-trace</module>
+                <module>stdlib/observability/ballerina-metrics</module>
                 <module>stdlib/ballerina-mime</module>
 
                 <module>bvm/ballerina-core</module>
@@ -848,6 +855,7 @@
                 <module>stdlib/ballerina-config</module>
                 <module>stdlib/ballerina-http</module>
                 <module>stdlib/observability/ballerina-trace</module>
+                <module>stdlib/observability/ballerina-metrics</module>
                 <module>stdlib/ballerina-mime</module>
 
                 <module>bvm/ballerina-core</module>
