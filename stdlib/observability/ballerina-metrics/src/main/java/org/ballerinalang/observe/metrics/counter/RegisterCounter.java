@@ -17,41 +17,38 @@
  *  under the License.
  * /
  */
-package org.ballerinalang.observe.metrics;
+package org.ballerinalang.observe.metrics.counter;
 
 import org.ballerinalang.bre.Context;
 import org.ballerinalang.model.types.TypeKind;
-import org.ballerinalang.model.values.BInteger;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
 import org.ballerinalang.model.values.BValue;
 import org.ballerinalang.natives.AbstractNativeFunction;
-import org.ballerinalang.natives.annotations.Argument;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
-import org.ballerinalang.natives.annotations.ReturnType;
 
 /**
- * TODO: Class level comment.
+ * This function create and register a counter.
  */
-
 @BallerinaFunction(
         packageName = "ballerina.metrics",
-        functionName = "incrementByOne",
+        functionName = "register",
         receiver = @Receiver(type = TypeKind.STRUCT, structType = "Counter",
                 structPackage = "ballerina.metrics"),
-        args = {@Argument(name = "label", type = TypeKind.STRING)},
         isPublic = true
 )
-public class IncrementByOne extends AbstractNativeFunction {
+public class RegisterCounter extends AbstractNativeFunction {
+
     @Override
     public BValue[] execute(Context context) {
         BStruct counter = (BStruct) getRefArgument(context, 0);
         String name = counter.getStringField(0);
         String help = counter.getStringField(1);
+        String namespace = counter.getStringField(2);
+        String subsystem = counter.getStringField(3);
         BStringArray labelNames = (BStringArray) counter.getRefField(0);
-        BStringArray labelValues = (BStringArray) getRefArgument(context,1);
-        //need to call the Prometheus wrapper methods
+
         return VOID_RETURN;
     }
 }

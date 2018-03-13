@@ -17,7 +17,7 @@
  *  under the License.
  * /
  */
-package org.ballerinalang.observe.metrics;
+package org.ballerinalang.observe.metrics.gauge;
 
 import org.ballerinalang.bre.Context;
 import org.ballerinalang.model.types.TypeKind;
@@ -30,27 +30,28 @@ import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
 
 /**
- * TODO: Class level comment.
+ * This function decrement the gauge by the given amount.
  */
 @BallerinaFunction(
         packageName = "ballerina.metrics",
-        functionName = "increment",
-        receiver = @Receiver(type = TypeKind.STRUCT, structType = "Counter",
+        functionName = "decrement",
+        receiver = @Receiver(type = TypeKind.STRUCT, structType = "Gauge",
                 structPackage = "ballerina.metrics"),
-        args = {@Argument(name = "label", type = TypeKind.STRING),
-                @Argument(name = "n", type = TypeKind.INT)},
+        args = {@Argument(name = "amount", type = TypeKind.FLOAT),
+                @Argument(name = "labelValues", type = TypeKind.STRING)},
         isPublic = true
 )
-public class Increment extends AbstractNativeFunction{
+public class DecrementGauge extends AbstractNativeFunction {
     @Override
     public BValue[] execute(Context context) {
-        BStruct counter = (BStruct) getRefArgument(context, 0);
-        String name = counter.getStringField(0);
-        String help = counter.getStringField(1);
-//        String labelNames = counter.getStringField(2);
-        BStringArray labelNames = (BStringArray) counter.getRefField(0);
-        BStringArray labelValues = (BStringArray) getRefArgument(context,1);
-        int n = (int) getIntArgument(context,0);
+        BStruct gauge = (BStruct) getRefArgument(context, 0);
+        String name = gauge.getStringField(0);
+        String help = gauge.getStringField(1);
+        String namespace = gauge.getStringField(2);
+        String subsystem = gauge.getStringField(3);
+        BStringArray labelNames = (BStringArray) gauge.getRefField(0);
+        BStringArray labelValues = (BStringArray) getRefArgument(context, 1);
+        float amount = (float) getFloatArgument(context, 0);
         //need to call the Prometheus wrapper methods
         return VOID_RETURN;
     }

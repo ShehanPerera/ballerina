@@ -29,34 +29,54 @@ import org.testng.annotations.BeforeTest;
 import org.testng.annotations.Test;
 
 /**
- * Tests for Counter metric.
+ * Tests for Gauge metric.
  */
-public class CounterTest {
+public class GaugeTest {
     private CompileResult compileResult;
 
     @BeforeTest
     public void setup() {
-        compileResult = BCompileUtil.compile("test-src/metrics/counter-test.bal");
+        compileResult = BCompileUtil.compile("test-src/metrics/gauge-test.bal");
     }
 
     @Test (priority = 1)
-    public void testRegisterCounter() {
-        BRunUtil.invoke(compileResult, "testRegisterCounter", new BValue[]{});
+    public void testRegisterGauge() {
+        BRunUtil.invoke(compileResult, "testRegisterGauge", new BValue[]{});
     }
 
     @Test (priority = 2)
     public void testCounterIncrementByOne() {
-        BRunUtil.invoke(compileResult, "testCounterIncrementByOne", new BValue[]{});
+        BRunUtil.invoke(compileResult, "testIncrementGaugeByOne", new BValue[]{});
     }
 
     @Test (priority = 3)
     public void testCounterIncrement() {
-        BRunUtil.invoke(compileResult, "tetsCounterIncrement", new BValue[]{});
+        BRunUtil.invoke(compileResult, "testIncrementGauge", new BValue[]{});
     }
 
     @Test (priority = 4)
+    public void testDecrementGaugeByOne() {
+        BRunUtil.invoke(compileResult, "testDecrementGaugeByOne", new BValue[]{});
+    }
+
+    @Test (priority = 5)
+    public void testDecrementgauge() {
+        BRunUtil.invoke(compileResult, "testDecrementgauge", new BValue[]{});
+    }
+
+    @Test (priority = 6)
+    public void testSetGauge() {
+        BRunUtil.invoke(compileResult, "testSetGauge", new BValue[]{});
+    }
+
+    @Test (priority = 7)
+    public void testSetGaugeToCurrentTime() {
+        BRunUtil.invoke(compileResult, "testSetGaugeToCurrentTime", new BValue[]{});
+    }
+
+    @Test (priority = 8)
     public void testGetCounter() {
-        BValue[] returns = BRunUtil.invoke(compileResult, "testGetCounter", new BValue[]{});
+        BValue[] returns = BRunUtil.invoke(compileResult, "testGetGauge", new BValue[]{});
         Assert.assertEquals((BFloat) returns[0], new BFloat(20.0f), "Invalid counter value returned.");
     }
 }
