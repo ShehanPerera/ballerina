@@ -22,7 +22,6 @@ import org.ballerinalang.bre.Context;
 import org.ballerinalang.logging.util.BLogLevel;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
 import org.ballerinalang.nativeimpl.log.AbstractLogFunction;
 import org.ballerinalang.natives.annotations.Argument;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
@@ -44,17 +43,16 @@ import java.util.Map;
 )
 public class Log extends AbstractLogFunction {
     @Override
-    public BValue[] execute(Context context) {
-        BStruct span = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct span = (BStruct) context.getRefArgument(0);
         String spanId = span.getStringField(0);
-        String event = getStringArgument(context, 0);
-        String message = getStringArgument(context, 1);
+        String event = context.getStringArgument(0);
+        String message = context.getStringArgument(1);
 
-        String pkg = context.getControlStack().currentFrame.prevStackFrame
-                .getCallableUnitInfo().getPackageInfo().getPkgPath();
+        String pkg = getPackagePath(context);
 
         if (LOG_MANAGER.getPackageLogLevel(pkg).value() <= BLogLevel.INFO.value()) {
-            String logMessage = String.format("[Tracing][Service: %s, Span: %s] Event: %s, Message: %s",
+            String logMessage = String.format("[Tracing] Service: %s, Span: %s, Event: %s, Message: %s",
                     span.getStringField(1), span.getStringField(2), event, message);
             getLogger(pkg).info(logMessage);
         }
@@ -63,6 +61,5 @@ public class Log extends AbstractLogFunction {
         logMap.put("event", event);
         logMap.put("message", message);
         OpenTracerBallerinaWrapper.getInstance().log(spanId, logMap);
-        return VOID_RETURN;
     }
 }

@@ -22,10 +22,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@link TraceManager} api acts as a bridge between ballerina core and the ballerina tracing modules.
- * This will remove OpenTracing dependencies from the ballerina core.
+ * {@link TraceManager} api acts as a bridge between
+ * ballerina core and the ballerina tracing modules.
+ * This will remove OpenTracing dependencies from
+ * the ballerina core.
  *
- * @since 0.963.1
+ * @since 0.964.1
  */
 public interface TraceManager {
 
@@ -43,7 +45,7 @@ public interface TraceManager {
      * @return {@link Map} of spans per tracer.
      */
     Map<String, Object> startSpan(long invocationId, String spanName, Map<String, ?> spanContextMap,
-                             Map<String, String> tags, boolean makeActive, String serviceName);
+                                  Map<String, String> tags, boolean makeActive, String serviceName);
 
     /**
      * Finishes the given list of spans.

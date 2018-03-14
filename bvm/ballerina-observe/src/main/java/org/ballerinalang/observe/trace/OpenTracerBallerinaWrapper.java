@@ -93,7 +93,7 @@ public class OpenTracerBallerinaWrapper {
      * @return the map carrier holding the span context
      */
     public Map<String, String> inject(String spanId) {
-        HashMap<String, String> carrierMap = new HashMap<>();
+        Map<String, String> carrierMap = new HashMap<>();
         Map<String, Span> activeSpanMap = spanStore.getSpan(spanId);
         if (enabled) {
             for (Map.Entry<String, Span> activeSpanEntry : activeSpanMap.entrySet()) {
@@ -111,7 +111,6 @@ public class OpenTracerBallerinaWrapper {
     /**
      * Method to start a span.
      *
-     * @param invocationId  unique id for each invocation
      * @param serviceName   name of the service the span should belong to
      * @param spanName      name of the span
      * @param tags          key value paired tags to attach to the span
@@ -119,8 +118,8 @@ public class OpenTracerBallerinaWrapper {
      * @param parentSpanId  id of the parent span
      * @return unique id of the created span
      */
-    public String startSpan(String invocationId, String serviceName, String spanName, Map<String, String> tags,
-                            ReferenceType referenceType, String parentSpanId) {
+    public String startSpan(String serviceName, String spanName, Map<String, String> tags, ReferenceType referenceType,
+                            String parentSpanId) {
         if (enabled) {
             Map<String, Span> spanMap = new HashMap<>();
             Map<String, Tracer> tracers = tracerStore.getTracers(serviceName);
@@ -144,7 +143,6 @@ public class OpenTracerBallerinaWrapper {
 
                 Span span = spanBuilder.start();
                 tracer.scopeManager().activate(span, false);
-                span.setBaggageItem(Constants.INVOCATION_ID_PROPERTY, String.valueOf(invocationId));
                 spanMap.put(tracerName, span);
             });
 
@@ -219,5 +217,39 @@ public class OpenTracerBallerinaWrapper {
             Map<String, Span> spanList = spanStore.getSpan(spanId);
             spanList.forEach((tracerName, span) -> span.log(logs));
         }
+    }
+
+    /**
+     * Method to add baggage item to an existing span.
+     *
+     * @param spanId       the id of the span
+     * @param baggageKey   the key of the baggage item
+     * @param baggageValue the value of the baggage item
+     */
+    public void setBaggageItem(String spanId, String baggageKey, String baggageValue) {
+        if (enabled) {
+            Map<String, Span> spanList = spanStore.getSpan(spanId);
+            spanList.forEach((tracerName, span) -> span.setBaggageItem(baggageKey, baggageValue));
+        }
+    }
+
+    /**
+     * Method to get a baggage value from an existing span.
+     *
+     * @param spanId     the id of the span
+     * @param baggageKey the key of the baggage item
+     */
+    public String getBaggageItem(String spanId, String baggageKey) {
+        String baggageValue = null;
+        if (enabled) {
+            Map<String, Span> spanMap = spanStore.getSpan(spanId);
+            for (Map.Entry<String, Span> spanEntry : spanMap.entrySet()) {
+                baggageValue = spanEntry.getValue().getBaggageItem(baggageKey);
+                if (baggageValue != null) {
+                    break;
+                }
+            }
+        }
+        return baggageValue;
     }
 }

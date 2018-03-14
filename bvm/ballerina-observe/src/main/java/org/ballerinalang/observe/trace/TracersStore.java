@@ -21,7 +21,6 @@ package org.ballerinalang.observe.trace;
 import io.opentracing.Tracer;
 import org.ballerinalang.observe.trace.config.OpenTracingConfig;
 import org.ballerinalang.observe.trace.config.TracerConfig;
-import org.ballerinalang.observe.trace.exception.InvalidConfigurationException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,11 +30,9 @@ import java.util.Map;
  */
 class TracersStore {
 
-    private final Map<String, Map<String, Tracer>> tracerServiceMap; // serviceName -> map(tracerName, tracer)
     private OpenTracingConfig openTracingConfig;
 
     TracersStore(OpenTracingConfig openTracingConfig) {
-        this.tracerServiceMap = new HashMap<>();
         this.openTracingConfig = openTracingConfig;
     }
 
@@ -46,27 +43,17 @@ class TracersStore {
      * @return trace implementations i.e: zipkin, jaeger
      */
     Map<String, Tracer> getTracers(String serviceName) {
-        Map<String, Tracer> tracerMap;
-        tracerMap = tracerServiceMap.get(serviceName);
-        if (tracerMap == null) {
-            tracerMap = new HashMap<>();
-            boolean isTracingEnabled = false;
-
-            for (TracerConfig tracerConfig : openTracingConfig.getTracers()) {
-                if (tracerConfig.isEnabled()) {
-                    try {
-                        Tracer tracer = OpenTracerFactory.getInstance().getTracer(tracerConfig, serviceName);
-                        tracerMap.put(tracerConfig.getName(), tracer);
-                        isTracingEnabled = true;
-                    } catch (IllegalAccessException | InstantiationException | ClassNotFoundException |
-                            InvalidConfigurationException ex) {
-                        // TODO: 2/13/18 Should we log?
-                    }
+        Map<String, Tracer> tracerMap = new HashMap<>();
+        for (TracerConfig tracerConfig : openTracingConfig.getTracers()) {
+            if (tracerConfig.isEnabled()) {
+                try {
+                    Tracer tracer = OpenTracerFactory.getInstance()
+                            .getTracer(tracerConfig, serviceName);
+                    tracerMap.put(tracerConfig.getName(), tracer);
+                } catch (Throwable ignored) {
+                    //Tracers will get added only of there's no errors.
+                    //If tracers contains errors, empty map will return.
                 }
-            }
-
-            if (isTracingEnabled) {
-                tracerServiceMap.put(serviceName, tracerMap);
             }
         }
         return tracerMap;

@@ -19,8 +19,6 @@
 package org.ballerinalang.runtime.threadpool;
 
 import org.ballerinalang.bre.Context;
-import org.ballerinalang.bre.bvm.BLangVM;
-import org.ballerinalang.util.tracer.BTracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,21 +29,20 @@ public class ResponseWorkerThread implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(ResponseWorkerThread.class);
     private Context context;
-    private BTracer bTracer;
 
     public ResponseWorkerThread(Context context) {
         this.context = context;
-        this.bTracer = context.getActiveBTracer();
     }
 
     public void run() {
-        BLangVM bLangVM = new BLangVM(context.getProgramFile());
-        try {
-            bLangVM.run(context);
-        } catch (Exception e) {
-            logger.error("unhandled exception ", e);
-        } finally {
-            bTracer.finishSpan();
-        }
+//        TODO
+//        BLangVM bLangVM = new BLangVM(context.getProgramFile());
+//        try {
+//            bLangVM.run(context);
+//        } catch (Exception e) {
+//            logger.error("unhandled exception ", e);
+//        } finally {
+//            bTracer.finishSpan();
+//        }
     }
 }
