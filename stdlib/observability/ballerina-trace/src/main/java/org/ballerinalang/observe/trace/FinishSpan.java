@@ -19,10 +19,9 @@
 package org.ballerinalang.observe.trace;
 
 import org.ballerinalang.bre.Context;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
 
@@ -35,13 +34,11 @@ import org.ballerinalang.natives.annotations.Receiver;
         receiver = @Receiver(type = TypeKind.STRUCT, structType = "Span", structPackage = "ballerina.observe"),
         isPublic = true
 )
-public class FinishSpan extends AbstractNativeFunction {
+public class FinishSpan extends BlockingNativeCallableUnit {
     @Override
-    public BValue[] execute(Context context) {
-
-        BStruct span = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct span = (BStruct) context.getRefArgument(0);
         String spanId = span.getStringField(0);
         OpenTracerBallerinaWrapper.getInstance().finishSpan(spanId);
-        return VOID_RETURN;
     }
 }

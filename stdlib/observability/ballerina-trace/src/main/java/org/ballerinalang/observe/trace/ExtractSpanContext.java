@@ -19,11 +19,10 @@
 package org.ballerinalang.observe.trace;
 
 import org.ballerinalang.bre.Context;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BString;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.ReturnType;
 import org.ballerinalang.net.http.HttpUtil;
@@ -43,12 +42,12 @@ import java.util.Map;
         returnType = {@ReturnType(type = TypeKind.STRING)},
         isPublic = true
 )
-public class ExtractSpanContext extends AbstractNativeFunction {
+public class ExtractSpanContext extends BlockingNativeCallableUnit {
     @Override
-    public BValue[] execute(Context context) {
+    public void execute(Context context) {
 
-        BStruct httpRequest = (BStruct) getRefArgument(context, 0);
-        String group = getStringArgument(context, 0);
+        BStruct httpRequest = (BStruct) context.getRefArgument(0);
+        String group = context.getStringArgument(0);
 
         HTTPCarbonMessage carbonMessage = HttpUtil.getCarbonMsg(httpRequest, null);
         Iterator<Map.Entry<String, String>> entryIterator = carbonMessage.getHeaders().iteratorAsString();
@@ -66,7 +65,7 @@ public class ExtractSpanContext extends AbstractNativeFunction {
         String spanId = OpenTracerBallerinaWrapper.getInstance().extract(spanHeaders);
 
         if (spanId != null) {
-            return getBValues(new BString(spanId));
+            context.setReturnValues(new BString(spanId));
         } else {
             throw new BallerinaException("Can not use tracing API when tracing is disabled. " +
                     "Check tracing configurations and dependencies.");

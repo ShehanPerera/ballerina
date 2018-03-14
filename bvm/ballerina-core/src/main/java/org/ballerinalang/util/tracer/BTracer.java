@@ -18,26 +18,28 @@
 
 package org.ballerinalang.util.tracer;
 
-import org.ballerinalang.bre.Context;
+import org.ballerinalang.bre.bvm.WorkerExecutionContext;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.ballerinalang.util.tracer.TraceConstant.INVOCATION_ID;
-import static org.ballerinalang.util.tracer.TraceConstant.STR_ERROR;
-import static org.ballerinalang.util.tracer.TraceConstant.STR_TRUE;
-import static org.ballerinalang.util.tracer.TraceConstant.TRACE_PREFIX;
+import static org.ballerinalang.util.tracer.TraceConstants.DEFAULT_ACTION_NAME;
+import static org.ballerinalang.util.tracer.TraceConstants.DEFAULT_CONNECTOR_NAME;
+import static org.ballerinalang.util.tracer.TraceConstants.INVOCATION_ID;
+import static org.ballerinalang.util.tracer.TraceConstants.TAG_KEY_STR_ERROR;
+import static org.ballerinalang.util.tracer.TraceConstants.TAG_STR_TRUE;
+import static org.ballerinalang.util.tracer.TraceConstants.TRACE_PREFIX;
 
 /**
  * {@code BTracer} holds the trace of the current context.
  *
- * @since 0.963.1
+ * @since 0.964.1
  */
-public class BTracer {
+public class BTracer implements Tracer {
 
-    private static TraceManagerWrapper manager = TraceManagerWrapper.getInstance();
+    private static final TraceManagerWrapper manager = TraceManagerWrapper.getInstance();
 
     /**
      * {@link Map} of properties, which used to represent
@@ -49,71 +51,63 @@ public class BTracer {
      */
     private Map<String, String> tags;
     /**
-     * flag to represent whether this is a client (originate
-     * from a client connector) context or a server context.
-     */
-    private boolean isClientContext;
-    /**
      * Name of the service.
      */
-    private String serviceName = "ballerinaService";
+    private String connectorName = DEFAULT_CONNECTOR_NAME;
     /**
      * Name of the resource.
      */
-    private String resourceName = "ballerinaResource";
+    private String actionName = DEFAULT_ACTION_NAME;
     /**
-     * Indicates whether this context is traceable or not.
+     * Active Ballerina {@link WorkerExecutionContext}.
      */
-    private boolean isTraceable = true;
-    /**
-     * Active Ballerina context.
-     */
-    private Context bContext = null;
-    /**
-     * If there's a parent, this should hold parent span context.
-     */
-    private Map<String, ?> parentSpanContext = null;
+    private WorkerExecutionContext executionContext = null;
     /**
      * Map of spans belongs to each open tracer.
      */
     private Map<String, ?> spans;
+    /**
+     * Indicate whether this is a root tracer.
+     */
+    private boolean isRoot = false;
 
     private BTracer() {
+
+    }
+
+    public BTracer(WorkerExecutionContext executionContext, boolean isClientContext) {
         this.properties = new HashMap<>();
         this.tags = new HashMap<>();
+        this.executionContext = executionContext;
+        this.isRoot = !isClientContext;
+        this.tags.put(TraceConstants.TAG_KEY_SPAN_KIND, isClientContext
+                ? TraceConstants.TAG_SPAN_KIND_CLIENT
+                : TraceConstants.TAG_SPAN_KIND_SERVER);
     }
 
-    public BTracer(Context bContext, boolean isClientContext) {
-        this();
-        this.bContext = bContext;
-        this.isClientContext = isClientContext;
-        this.tags.put(TraceConstant.KEY_SPAN_KIND, isClientContext
-                ? TraceConstant.SPAN_KIND_CLIENT
-                : TraceConstant.SPAN_KIND_SERVER);
-        this.isTraceable = !(isClientContext &&
-                bContext.getControlStack().getCurrentFrame()
-                        .getCallableUnitInfo().getName()
-                        .endsWith(TraceConstant.FUNCTION_INIT)
-        );
-    }
-
+    @Override
     public void startSpan() {
-        manager.startSpan(bContext);
+        manager.startSpan(executionContext);
     }
 
+    @Override
     public void finishSpan() {
         manager.finishSpan(this);
     }
 
+    @Override
     public void log(Map<String, Object> fields) {
         manager.log(this, fields);
     }
 
+    @Override
     public void logError(Map<String, Object> fields) {
-        addTags(Collections.singletonMap(STR_ERROR, STR_TRUE));
+        addTags(Collections.singletonMap(TAG_KEY_STR_ERROR, TAG_STR_TRUE));
         manager.log(this, fields);
+
     }
 
+    @Override
     public void addTags(Map<String, String> tags) {
         if (spans != null) {
             //span has started, there for add tags to the span.
@@ -123,34 +117,42 @@ public class BTracer {
             //the span get created.
             this.tags.putAll(tags);
         }
+
     }
 
-    public String getServiceName() {
-        return serviceName;
+    @Override
+    public String getConnectorName() {
+        return connectorName;
     }
 
-    public void setServiceName(String serviceName) {
-        this.serviceName = serviceName;
+    @Override
+    public void setConnectorName(String connectorName) {
+        this.connectorName = connectorName;
     }
 
-    public String getResourceName() {
-        return resourceName;
+    @Override
+    public String getActionName() {
+        return actionName;
     }
 
-    public void setResourceName(String resourceName) {
-        this.resourceName = resourceName;
+    @Override
+    public void setActionName(String actionName) {
+        this.actionName = actionName;
     }
 
+    @Override
     public Map<String, String> getProperties() {
         return properties;
     }
 
+    @Override
     public void addProperty(String key, String value) {
         if (properties != null) {
             properties.put(key, value);
         }
     }
 
+    @Override
     public String getProperty(String key) {
         if (properties != null) {
             return properties.get(key);
@@ -158,47 +160,43 @@ public class BTracer {
         return null;
     }
 
+    @Override
     public Map<String, String> getTags() {
         return tags;
     }
 
-    public boolean isTraceable() {
-        return isTraceable;
-    }
-
-    public boolean isClientContext() {
-        return isClientContext;
-    }
-
+    @Override
     public String getInvocationID() {
         return getProperty(TRACE_PREFIX + INVOCATION_ID);
     }
 
+    @Override
     public void setInvocationID(String invocationId) {
         addProperty(TRACE_PREFIX + INVOCATION_ID, invocationId);
     }
 
-    public void setContext(Context bContext) {
-        this.bContext = bContext;
+    @Override
+    public void setExecutionContext(WorkerExecutionContext executionContext) {
+        this.executionContext = executionContext;
     }
 
-    public Map getParentSpanContext() {
-        return parentSpanContext;
-    }
-
-    public void setParentSpanContext(Map<String, ?> parentSpanContext) {
-        this.parentSpanContext = parentSpanContext;
-    }
-
+    @Override
     public Map getSpans() {
         return spans;
     }
 
+    @Override
     public void setSpans(Map<String, ?> spans) {
         this.spans = spans;
     }
 
+    @Override
     public void generateInvocationID() {
         setInvocationID(String.valueOf(ThreadLocalRandom.current().nextLong()));
+    }
+
+    @Override
+    public boolean isRoot() {
+        return isRoot;
     }
 }
