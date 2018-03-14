@@ -1,11 +1,22 @@
 import ballerina.metrics;
 
+metrics:Counter counter = {name:"requests_total",help:"Total requests.", namespace:"sample", subsystem:"worker_pool",
+                              labelNames:["method"]};
+
+//metrics:Counter counter = {name:"requests_total",help:"Total requests.", labelNames:["method"]};
+
+function testRegisterCounter() {
+    counter.register();
+}
+
 function testCounterIncrementByOne() {
-    metrics:Counter counter = {name:"requests_total",help:"Total requests.",labelNames:["method"]};
     counter.incrementByOne(["get"]);
 }
 
 function tetsCounterIncrement() {
-    metrics:Counter counter = {name:"requests_total",help:"Total requests.",labelNames:["method"]};
-    counter.increment(["post"], 5);
+    counter.increment(5.0f, ["get"]);
+}
+
+function testGetCounter() (float){
+    return counter.get();
 }

@@ -28,7 +28,7 @@ import org.ballerinalang.spi.SystemPackageRepositoryProvider;
  * This is the class which registers the functions defined with the ballerina.
  */
 @JavaSPIService("org.ballerinalang.spi.SystemPackageRepositoryProvider")
-public class StandardSystemPackageRepositoryProvider implements SystemPackageRepositoryProvider{
+public class StandardSystemPackageRepositoryProvider implements SystemPackageRepositoryProvider {
     private static final String SYSTEM_ORG_NAME = "natives";
 
     @Override
