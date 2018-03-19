@@ -27,7 +27,6 @@ import org.ballerinalang.bre.bvm.CPU;
 import org.ballerinalang.bre.bvm.CPU.HandleErrorException;
 import org.ballerinalang.bre.bvm.CallableUnitCallback;
 import org.ballerinalang.bre.bvm.CallableWorkerResponseContext;
-import org.ballerinalang.bre.bvm.CallbackedInvocableWorkerResponseContext;
 import org.ballerinalang.bre.bvm.ForkJoinTimeoutCallback;
 import org.ballerinalang.bre.bvm.ForkJoinWorkerResponseContext;
 import org.ballerinalang.bre.bvm.InitWorkerResponseContext;
@@ -49,12 +48,14 @@ import org.ballerinalang.util.codegen.attributes.CodeAttributeInfo;
 import org.ballerinalang.util.exceptions.BLangNullReferenceException;
 import org.ballerinalang.util.exceptions.BLangRuntimeException;
 import org.ballerinalang.util.tracer.TraceUtil;
+import org.ballerinalang.util.tracer.TraceableUnitCallback;
 import org.wso2.ballerinalang.util.Lists;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 
 /**
  * This class contains helper methods to invoke Ballerina functions.
@@ -133,9 +134,11 @@ public class BLangFunctions {
             WorkerExecutionContext parentCtx, int[] argRegs, int[] retRegs,
             CallableUnitCallback responseCallback) {
         WorkerSet workerSet = listWorkers(callableUnitInfo);
-        SyncCallableWorkerResponseContext respCtx = new CallbackedInvocableWorkerResponseContext(
-                callableUnitInfo.getRetParamTypes(), workerSet.generalWorkers.length, false, responseCallback);
-        respCtx.updateTargetContextInfo(parentCtx, retRegs);
+        SyncCallableWorkerResponseContext respCtx = new SyncCallableWorkerResponseContext(
+                callableUnitInfo.getRetParamTypes(), workerSet.generalWorkers.length);
+        respCtx.registerResponseCallback(responseCallback);
+        respCtx.registerResponseCallback(new TraceableUnitCallback(parentCtx));
+        respCtx.joinTargetContextInfo(parentCtx, retRegs);
         WorkerDataIndex wdi = callableUnitInfo.retWorkerIndex;
 
         /* execute the init worker and extract the local variables created by it */
@@ -174,14 +177,18 @@ public class BLangFunctions {
         WorkerSet workerSet = listWorkers(callableUnitInfo);
         int generalWorkersCount = workerSet.generalWorkers.length;
         CallableWorkerResponseContext respCtx;
+        WaitForResponseCallback respCallback = null;
         if (generalWorkersCount == 1) {
-            respCtx = new CallableWorkerResponseContext(callableUnitInfo.getRetParamTypes(), generalWorkersCount,
-                    waitForResponse);
+            respCtx = new CallableWorkerResponseContext(callableUnitInfo.getRetParamTypes(), generalWorkersCount);
         } else {
-            respCtx = new SyncCallableWorkerResponseContext(callableUnitInfo.getRetParamTypes(), generalWorkersCount,
-                    waitForResponse);
+            respCtx = new SyncCallableWorkerResponseContext(callableUnitInfo.getRetParamTypes(), generalWorkersCount);
         }
-        respCtx.updateTargetContextInfo(parentCtx, retRegs);
+        if (waitForResponse) {
+            respCallback = new WaitForResponseCallback();
+            respCtx.registerResponseCallback(respCallback);
+        }
+        respCtx.registerResponseCallback(new TraceableUnitCallback(parentCtx));
+        respCtx.joinTargetContextInfo(parentCtx, retRegs);
         WorkerDataIndex wdi = callableUnitInfo.retWorkerIndex;
 
         /* execute the init worker and extract the local variables created by it */
@@ -204,7 +211,7 @@ public class BLangFunctions {
                 workerSet.generalWorkers[0], wdi, initWorkerLocalData, initWorkerCAI, true);
         if (waitForResponse) {
             BLangScheduler.executeNow(runInCallerCtx);
-            respCtx.waitForResponse();
+            respCallback.waitForResponse();
             // An error in the context at this point means an unhandled runtime error has propagated
             // all the way up to the entry point. Hence throw a {@link BLangRuntimeException} and
             // terminate the execution.
@@ -233,11 +240,12 @@ public class BLangFunctions {
             if (nativeCallable.isBlocking()) {
                 nativeCallable.execute(ctx, null);
                 BLangVMUtils.populateWorkerDataWithValues(parentLocalData, retRegs, ctx.getReturnValues(), retTypes);
-                /* we want the parent to continue, since we got the response of the native call already */
                 TraceUtil.finishTraceSpan(parentCtx.getTracer());
+                /* we want the parent to continue, since we got the response of the native call already */
                 return parentCtx;
             } else {
-                BLangCallableUnitCallback callback = new BLangCallableUnitCallback(ctx, parentCtx, retRegs, retTypes);
+                TraceableUnitCallback callback = new TraceableUnitCallback(parentCtx,
+                        new BLangCallableUnitCallback(ctx, parentCtx, retRegs, retTypes));
                 nativeCallable.execute(ctx, callback);
                 /* we want the parent to suspend (i.e. go to wait for response state) and stay until notified */
                 return null;
@@ -364,6 +372,7 @@ public class BLangFunctions {
         SyncCallableWorkerResponseContext respCtx = new ForkJoinWorkerResponseContext(parentCtx, joinTargetIp,
                 joinVarReg, timeoutTargetIp, timeoutVarReg, workerInfos.length, reqJoinCount, 
                 joinWorkerNames, channels);
+        respCtx.registerResponseCallback(new TraceableUnitCallback(parentCtx));
         if (forkjoinInfo.isTimeoutAvailable()) {
             long timeout = parentCtx.workerLocal.longRegs[timeoutRegIndex];
             //fork join timeout is in seconds, hence converting to milliseconds
@@ -404,6 +413,31 @@ public class BLangFunctions {
 
         public WorkerInfo[] generalWorkers;
 
+    }
+    
+    /**
+     * Callback handler to check for callable response availability.
+     */
+    private static class WaitForResponseCallback implements CallableUnitCallback {
+
+        private Semaphore check = new Semaphore(0);
+        
+        @Override
+        public void notifySuccess() {
+            this.check.release();
+        }
+
+        @Override
+        public void notifyFailure(BStruct error) {
+            this.check.release();
+        }
+        
+        public void waitForResponse() {
+            try {
+                this.check.acquire();
+            } catch (InterruptedException ignore) { /* ignore */ }
+        }
+        
     }
 
 }
