@@ -21,12 +21,11 @@ package org.ballerinalang.observe.metrics.summary;
 
 import org.ballerinalang.bre.Context;
 import org.ballerinalang.bre.bvm.BLangVMStructs;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BRefValueArray;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
 import org.ballerinalang.natives.annotations.ReturnType;
@@ -45,13 +44,13 @@ import org.ballerinalang.util.codegen.StructInfo;
                 structPackage = "ballerina.metrics")},
         isPublic = true
 )
-public class GetSummary extends AbstractNativeFunction {
+public class GetSummary extends BlockingNativeCallableUnit {
     private static final String SUMMARY_VALUE_PACKAGE = "ballerina.metrics";
     private static final String SUMMARY_VALUE_STRUCT_TYPE = "SummaryValue";
 
     @Override
-    public BValue[] execute(Context context) {
-        BStruct summary = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct summary = (BStruct) context.getRefArgument(0);
         String name = summary.getStringField(0);
         String help = summary.getStringField(1);
         String namespace = summary.getStringField(2);
@@ -68,6 +67,6 @@ public class GetSummary extends AbstractNativeFunction {
         summaryValue.setFloatField(1, 43.5f);
         summaryValue.setRefField(0, quantiles);
 
-        return getBValues(summaryValue);
+        context.setReturnValues(summaryValue);
     }
 }

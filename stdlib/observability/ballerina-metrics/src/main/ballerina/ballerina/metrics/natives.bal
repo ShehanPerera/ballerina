@@ -93,7 +93,7 @@ public native function <Gauge gauge> decrement(float amount, string[] labelValue
 @Description {value:"Set the gauge to the given value."}
 @Param {value:"gauge: The gauge instance to be set."}
 @Param {value:"value: value to be set to the gauge."}
-public native function <Gauge gauge> set(float value);
+public native function <Gauge gauge> setGauge(float value);
 
 @Description {value:"Set the gauge to the current unix time."}
 @Param {value:"gauge: The gauge instance to be set."}

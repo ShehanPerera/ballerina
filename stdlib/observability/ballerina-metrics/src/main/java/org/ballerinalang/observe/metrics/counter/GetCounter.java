@@ -20,12 +20,11 @@
 package org.ballerinalang.observe.metrics.counter;
 
 import org.ballerinalang.bre.Context;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BFloat;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
 import org.ballerinalang.natives.annotations.ReturnType;
@@ -41,17 +40,17 @@ import org.ballerinalang.natives.annotations.ReturnType;
         returnType = {@ReturnType(type = TypeKind.FLOAT)},
         isPublic = true
 )
-public class GetCounter extends AbstractNativeFunction {
+public class GetCounter extends BlockingNativeCallableUnit {
 
     @Override
-    public BValue[] execute(Context context) {
-        BStruct counter = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct counter = (BStruct) context.getRefArgument(0);
         String name = counter.getStringField(0);
         String help = counter.getStringField(1);
         String namespace = counter.getStringField(2);
         String subsystem = counter.getStringField(3);
         BStringArray labelNames = (BStringArray) counter.getRefField(0);
         float count = 20.0f;
-        return getBValues(new BFloat(count));
+        context.setReturnValues(new BFloat(count));
     }
 }
