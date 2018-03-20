@@ -21,12 +21,11 @@ package org.ballerinalang.observe.metrics.histogram;
 
 import org.ballerinalang.bre.Context;
 import org.ballerinalang.bre.bvm.BLangVMStructs;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BFloatArray;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
 import org.ballerinalang.natives.annotations.ReturnType;
@@ -45,13 +44,13 @@ import org.ballerinalang.util.codegen.StructInfo;
                 structPackage = "ballerina.metrics")},
         isPublic = true
 )
-public class GetHistogram extends AbstractNativeFunction {
+public class GetHistogram extends BlockingNativeCallableUnit {
     private static final String HISTOGRAM_VALUE_PACKAGE = "ballerina.metrics";
     private static final String HISTOGRAM_VALUE_STRUCT_TYPE = "HistogramValue";
 
     @Override
-    public BValue[] execute(Context context) {
-        BStruct histogram = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct histogram = (BStruct) context.getRefArgument(0);
         String name = histogram.getStringField(0);
         String help = histogram.getStringField(1);
         String namespace = histogram.getStringField(2);
@@ -65,6 +64,6 @@ public class GetHistogram extends AbstractNativeFunction {
         histogramValue.setFloatField(0, 34.5f);
         histogramValue.setRefField(0, buckets);
 
-        return getBValues(histogramValue);
+        context.setReturnValues(histogramValue);
     }
 }

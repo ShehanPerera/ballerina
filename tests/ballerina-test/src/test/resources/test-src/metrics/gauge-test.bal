@@ -24,7 +24,7 @@ function testDecrementgauge() {
 }
 
 function testSetGauge() {
-    gauge.set(12.4f);
+    gauge.setGauge(12.4f);
 }
 
 function testSetGaugeToCurrentTime() {

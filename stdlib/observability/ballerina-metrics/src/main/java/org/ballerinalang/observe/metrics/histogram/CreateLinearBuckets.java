@@ -20,12 +20,11 @@
 package org.ballerinalang.observe.metrics.histogram;
 
 import org.ballerinalang.bre.Context;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BFloatArray;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.Argument;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
@@ -45,10 +44,10 @@ import org.ballerinalang.natives.annotations.ReturnType;
         returnType = {@ReturnType(type = TypeKind.ARRAY)},
         isPublic = true
 )
-public class CreateLinearBuckets extends AbstractNativeFunction {
+public class CreateLinearBuckets extends BlockingNativeCallableUnit {
     @Override
-    public BValue[] execute(Context context) {
-        BStruct histogram = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct histogram = (BStruct) context.getRefArgument(0);
         String name = histogram.getStringField(0);
         String help = histogram.getStringField(1);
         String namespace = histogram.getStringField(2);
@@ -56,12 +55,12 @@ public class CreateLinearBuckets extends AbstractNativeFunction {
         BStringArray labelNames = (BStringArray) histogram.getRefField(0);
         BFloatArray buckets = (BFloatArray) histogram.getRefField(1);
 
-        float start = (float) getFloatArgument(context, 0);
-        float width = (float) getFloatArgument(context, 1);
-        int count = (int) getIntArgument(context, 0);
+        float start = (float) context.getFloatArgument(0);
+        float width = (float) context.getFloatArgument(1);
+        int count = (int) context.getIntArgument(0);
 
         BFloatArray seq = new BFloatArray(new double[]{2.3, 6.7, 3.5});
 
-        return getBValues(seq);
+        context.setReturnValues(seq);
     }
 }

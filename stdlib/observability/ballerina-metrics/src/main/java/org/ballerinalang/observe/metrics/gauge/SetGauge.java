@@ -20,11 +20,10 @@
 package org.ballerinalang.observe.metrics.gauge;
 
 import org.ballerinalang.bre.Context;
+import org.ballerinalang.bre.bvm.BlockingNativeCallableUnit;
 import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
-import org.ballerinalang.model.values.BValue;
-import org.ballerinalang.natives.AbstractNativeFunction;
 import org.ballerinalang.natives.annotations.Argument;
 import org.ballerinalang.natives.annotations.BallerinaFunction;
 import org.ballerinalang.natives.annotations.Receiver;
@@ -34,23 +33,21 @@ import org.ballerinalang.natives.annotations.Receiver;
  */
 @BallerinaFunction(
         packageName = "ballerina.metrics",
-        functionName = "set",
+        functionName = "setGauge",
         receiver = @Receiver(type = TypeKind.STRUCT, structType = "Gauge",
                 structPackage = "ballerina.metrics"),
         args = {@Argument(name = "value", type = TypeKind.FLOAT)},
         isPublic = true
 )
-public class SetGauge extends AbstractNativeFunction {
+public class SetGauge extends BlockingNativeCallableUnit {
     @Override
-    public BValue[] execute(Context context) {
-        BStruct gauge = (BStruct) getRefArgument(context, 0);
+    public void execute(Context context) {
+        BStruct gauge = (BStruct) context.getRefArgument(0);
         String name = gauge.getStringField(0);
         String help = gauge.getStringField(1);
         String namespace = gauge.getStringField(2);
         String subsystem = gauge.getStringField(3);
         BStringArray labelNames = (BStringArray) gauge.getRefField(0);
-        float value = (float) getFloatArgument(context, 0);
-        //need to call the Prometheus wrapper methods
-        return VOID_RETURN;
+        float value = (float) context.getFloatArgument(0);
     }
 }
