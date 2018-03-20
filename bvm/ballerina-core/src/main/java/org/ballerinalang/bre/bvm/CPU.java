@@ -51,11 +51,13 @@ import org.ballerinalang.model.values.BMap;
 import org.ballerinalang.model.values.BNewArray;
 import org.ballerinalang.model.values.BRefType;
 import org.ballerinalang.model.values.BRefValueArray;
+import org.ballerinalang.model.values.BStream;
+import org.ballerinalang.model.values.BStreamlet;
 import org.ballerinalang.model.values.BString;
 import org.ballerinalang.model.values.BStringArray;
 import org.ballerinalang.model.values.BStruct;
 import org.ballerinalang.model.values.BTable;
-import org.ballerinalang.model.values.BTypeValue;
+import org.ballerinalang.model.values.BTypeDescValue;
 import org.ballerinalang.model.values.BValue;
 import org.ballerinalang.model.values.BXML;
 import org.ballerinalang.model.values.BXMLAttributes;
@@ -80,6 +82,7 @@ import org.ballerinalang.util.codegen.Instruction.InstructionWRKSendReceive;
 import org.ballerinalang.util.codegen.InstructionCodes;
 import org.ballerinalang.util.codegen.LineNumberInfo;
 import org.ballerinalang.util.codegen.PackageInfo;
+import org.ballerinalang.util.codegen.StreamletInfo;
 import org.ballerinalang.util.codegen.StructFieldInfo;
 import org.ballerinalang.util.codegen.StructInfo;
 import org.ballerinalang.util.codegen.WorkerDataChannelInfo;
@@ -91,6 +94,7 @@ import org.ballerinalang.util.codegen.cpentries.FloatCPEntry;
 import org.ballerinalang.util.codegen.cpentries.FunctionCallCPEntry;
 import org.ballerinalang.util.codegen.cpentries.FunctionRefCPEntry;
 import org.ballerinalang.util.codegen.cpentries.IntegerCPEntry;
+import org.ballerinalang.util.codegen.cpentries.StreamletRefCPEntry;
 import org.ballerinalang.util.codegen.cpentries.StringCPEntry;
 import org.ballerinalang.util.codegen.cpentries.StructureRefCPEntry;
 import org.ballerinalang.util.codegen.cpentries.TypeRefCPEntry;
@@ -103,11 +107,13 @@ import org.ballerinalang.util.program.BLangFunctions;
 import org.ballerinalang.util.program.BLangVMUtils;
 import org.ballerinalang.util.transactions.LocalTransactionInfo;
 import org.ballerinalang.util.transactions.TransactionConstants;
+import org.ballerinalang.util.transactions.TransactionResourceManager;
 
 import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.UUID;
 
 import static org.ballerinalang.util.BLangConstants.STRING_NULL_VALUE;
 
@@ -351,7 +357,7 @@ public class CPU {
                     cpIndex = operands[0];
                     j = operands[1];
                     TypeRefCPEntry typeEntry = (TypeRefCPEntry) ctx.constPool[cpIndex];
-                    sf.refRegs[j] = new BTypeValue(typeEntry.getType());
+                    sf.refRegs[j] = new BTypeDescValue(typeEntry.getType());
                     break;
                 case InstructionCodes.TYPEOF:
                     i = operands[0];
@@ -360,7 +366,7 @@ public class CPU {
                         handleNullRefError(ctx);
                         break;
                     }
-                    sf.refRegs[j] = new BTypeValue(sf.refRegs[i].getType());
+                    sf.refRegs[j] = new BTypeDescValue(sf.refRegs[i].getType());
                     break;
                 case InstructionCodes.HALT:
                     BLangScheduler.workerDone(ctx);
@@ -395,7 +401,7 @@ public class CPU {
                 case InstructionCodes.CALL:
                     callIns = (InstructionCALL) instruction;
                     ctx = BLangFunctions.invokeCallable(callIns.functionInfo, ctx, callIns.argRegs,
-                            callIns.retRegs, false);
+                            callIns.retRegs, false, callIns.async);
                     if (ctx == null) {
                         return;
                     }
@@ -403,14 +409,14 @@ public class CPU {
                 case InstructionCodes.VCALL:
                     InstructionVCALL vcallIns = (InstructionVCALL) instruction;
                     ctx = invokeVirtualFunction(ctx, vcallIns.receiverRegIndex, vcallIns.functionInfo,
-                            vcallIns.argRegs, vcallIns.retRegs);
+                            vcallIns.argRegs, vcallIns.retRegs, vcallIns.async);
                     if (ctx == null) {
                         return;
                     }
                     break;
                 case InstructionCodes.ACALL:
                     InstructionACALL acallIns = (InstructionACALL) instruction;
-                    ctx = invokeAction(ctx, acallIns.actionName, acallIns.argRegs, acallIns.retRegs);
+                    ctx = invokeAction(ctx, acallIns.actionName, acallIns.argRegs, acallIns.retRegs, acallIns.async);
                     if (ctx == null) {
                         return;
                     }
@@ -418,7 +424,7 @@ public class CPU {
                 case InstructionCodes.TCALL:
                     InstructionTCALL tcallIns = (InstructionTCALL) instruction;
                     ctx = BLangFunctions.invokeCallable(tcallIns.transformerInfo, ctx, tcallIns.argRegs,
-                            tcallIns.retRegs, false);
+                            tcallIns.retRegs, false, tcallIns.async);
                     if (ctx == null) {
                         return;
                     }
@@ -426,7 +432,9 @@ public class CPU {
                 case InstructionCodes.TR_BEGIN:
                     i = operands[0];
                     j = operands[1];
-                    beginTransaction(ctx, i, j);
+                    int k = operands[2];
+                    int h = operands[3];
+                    beginTransaction(ctx, i, j, k, h);
                     break;
                 case InstructionCodes.TR_END:
                     i = operands[0];
@@ -439,7 +447,7 @@ public class CPU {
                     break;
                 case InstructionCodes.WRKRECEIVE:
                     InstructionWRKSendReceive wrkReceiveIns = (InstructionWRKSendReceive) instruction;
-                    if (!handleWorkerReceive(ctx, wrkReceiveIns.dataChannelInfo, wrkReceiveIns.types, 
+                    if (!handleWorkerReceive(ctx, wrkReceiveIns.dataChannelInfo, wrkReceiveIns.types,
                             wrkReceiveIns.regs)) {
                         return;
                     }
@@ -629,6 +637,18 @@ public class CPU {
                     typeRefCPEntry = (TypeRefCPEntry) ctx.constPool[cpIndex];
                     sf.refRegs[i] = new BTable(typeRefCPEntry.getType());
                     break;
+                case InstructionCodes.NEWSTREAM:
+                    i = operands[0];
+                    cpIndex = operands[1];
+                    typeRefCPEntry = (TypeRefCPEntry) ctx.constPool[cpIndex];
+                    StringCPEntry name = (StringCPEntry) ctx.constPool[operands[2]];
+                    BStream stream = new BStream(typeRefCPEntry.getType(), name.getValue());
+                    StreamingRuntimeManager.getInstance().addStreamReference(name.getValue(), stream);
+                    sf.refRegs[i] = stream;
+                    break;
+                case InstructionCodes.NEWSTREAMLET:
+                    createNewStreamlet(ctx, operands, sf);
+                    break;
                 case InstructionCodes.NEW_INT_RANGE:
                     createNewIntRange(operands, sf);
                     break;
@@ -714,13 +734,22 @@ public class CPU {
                     InstructionLock instructionUnLock = (InstructionLock) instruction;
                     handleVariableUnlock(ctx, instructionUnLock.types, instructionUnLock.varRegs);
                     break;
+                case InstructionCodes.ASYNC:
+                    execAsync(ctx);
+                    break;
+                case InstructionCodes.AWAIT:
+                    ctx = execAwait(ctx);
+                    if (ctx == null) {
+                        return;
+                    }
+                    break;
                 default:
                     throw new UnsupportedOperationException();
             }
         }
     }
 
-    private static void execCmpAndBranchOpcodes(WorkerExecutionContext ctx, WorkerData sf, int opcode, 
+    private static void execCmpAndBranchOpcodes(WorkerExecutionContext ctx, WorkerData sf, int opcode,
             int[] operands) {
         int i;
         int j;
@@ -1844,6 +1873,9 @@ public class CPU {
                 } else if (bRefType.getType() == BTypes.typeFloat) {
                     sf.refRegs[k] = null;
                     sf.doubleRegs[j] = ((BFloat) bRefType).floatValue();
+                } else if (bRefType.getType() == BTypes.typeInt) {
+                    sf.refRegs[k] = null;
+                    sf.doubleRegs[j] = ((BInteger) bRefType).floatValue();
                 } else {
                     sf.doubleRegs[j] = 0;
                     handleTypeCastError(ctx, sf, k, bRefType.getType(), BTypes.typeFloat);
@@ -1910,10 +1942,13 @@ public class CPU {
                 handleAnyToRefTypeCast(ctx, sf, operands, BTypes.typeMap);
                 break;
             case InstructionCodes.ANY2TYPE:
-                handleAnyToRefTypeCast(ctx, sf, operands, BTypes.typeType);
+                handleAnyToRefTypeCast(ctx, sf, operands, BTypes.typeDesc);
                 break;
             case InstructionCodes.ANY2DT:
                 handleAnyToRefTypeCast(ctx, sf, operands, BTypes.typeTable);
+                break;
+            case InstructionCodes.ANYSTM:
+                handleAnyToRefTypeCast(ctx, sf, operands, BTypes.typeStream);
                 break;
             case InstructionCodes.ANY2E:
             case InstructionCodes.ANY2T:
@@ -1969,7 +2004,7 @@ public class CPU {
     }
 
     @SuppressWarnings("rawtypes")
-    private static void execTypeConversionOpcodes(WorkerExecutionContext ctx, WorkerData sf, int opcode, 
+    private static void execTypeConversionOpcodes(WorkerExecutionContext ctx, WorkerData sf, int opcode,
             int[] operands) {
         int i;
         int j;
@@ -2268,7 +2303,7 @@ public class CPU {
         }
     }
 
-    private static void execXMLCreationOpcodes(WorkerExecutionContext ctx, WorkerData sf, int opcode, 
+    private static void execXMLCreationOpcodes(WorkerExecutionContext ctx, WorkerData sf, int opcode,
             int[] operands) {
         int i;
         int j;
@@ -2473,7 +2508,7 @@ public class CPU {
     }
 
     @SuppressWarnings("rawtypes")
-    private static void handleAnyToRefTypeCast(WorkerExecutionContext ctx, WorkerData sf, int[] operands, 
+    private static void handleAnyToRefTypeCast(WorkerExecutionContext ctx, WorkerData sf, int[] operands,
             BType targetType) {
         int i = operands[0];
         int j = operands[1];
@@ -2504,13 +2539,13 @@ public class CPU {
         sf.refRegs[errorRegIndex] = errorVal;
     }
 
-    private static void handleTypeConversionError(WorkerExecutionContext ctx, WorkerData sf, int errorRegIndex, 
+    private static void handleTypeConversionError(WorkerExecutionContext ctx, WorkerData sf, int errorRegIndex,
             String sourceTypeName, String targetTypeName) {
         String errorMsg = "'" + sourceTypeName + "' cannot be converted to '" + targetTypeName + "'";
         handleTypeConversionError(ctx, sf, errorRegIndex, errorMsg);
     }
 
-    private static void handleTypeConversionError(WorkerExecutionContext ctx, WorkerData sf, 
+    private static void handleTypeConversionError(WorkerExecutionContext ctx, WorkerData sf,
             int errorRegIndex, String errorMessage) {
         BStruct errorVal;
         errorVal = BLangVMErrors.createTypeConversionError(ctx, errorMessage);
@@ -2585,7 +2620,26 @@ public class CPU {
         sf.refRegs[i] = bStruct;
     }
 
-    private static void beginTransaction(WorkerExecutionContext ctx, int transactionBlockId, int retryCountRegIndex) {
+    private static void createNewStreamlet(WorkerExecutionContext ctx, int[] operands, WorkerData sf) {
+        int cpIndex = operands[0];
+        int i = operands[1];
+        StreamletRefCPEntry streamletRefCPEntry = (StreamletRefCPEntry) ctx.constPool[cpIndex];
+        StreamletInfo streamletInfo = (StreamletInfo) streamletRefCPEntry.getStreamletInfo();
+        BStreamlet streamlet = new BStreamlet(streamletInfo.getType());
+        streamlet.setSiddhiApp(streamletInfo.getSiddhiQuery());
+        streamlet.setStreamIdsAsString(streamletInfo.getStreamIdsAsString());
+        StreamingRuntimeManager.getInstance().createSiddhiAppRuntime(streamlet);
+        StreamingRuntimeManager.getInstance().registerSubscriberForTopics(streamlet.getStreamSpecificInputHandlerMap(),
+                                                                          streamletInfo.getStreamIdsAsString());
+        sf.refRegs[i] = streamlet;
+    }
+
+    private static void beginTransaction(WorkerExecutionContext ctx, int transactionBlockId, int retryCountRegIndex,
+            int committedFuncIndex, int abortedFuncIndex) {
+        //If global tx enabled, it is managed via transaction coordinator. Otherwise it is managed locally without
+        //any interaction with the transaction coordinator.
+        boolean isGlobalTransactionEnabled = ctx.getGlobalTransactionEnabled();
+
         //Transaction is attempted three times by default to improve resiliency
         int retryCount = TransactionConstants.DEFAULT_RETRY_COUNT;
         if (retryCountRegIndex != -1) {
@@ -2597,21 +2651,46 @@ public class CPU {
                 return;
             }
         }
+
+        //Register committed function handler if exists.
+        if (committedFuncIndex != -1) {
+            FunctionRefCPEntry funcRefCPEntry = (FunctionRefCPEntry) ctx.constPool[committedFuncIndex];
+            BFunctionPointer fpCommitted = new BFunctionPointer(funcRefCPEntry);
+            TransactionResourceManager.getInstance().registerCommittedFunction(transactionBlockId, fpCommitted);
+        }
+
+        //Register aborted function handler if exists.
+        if (abortedFuncIndex != -1) {
+            FunctionRefCPEntry funcRefCPEntry = (FunctionRefCPEntry) ctx.constPool[abortedFuncIndex];
+            BFunctionPointer fpAborted = new BFunctionPointer(funcRefCPEntry);
+            TransactionResourceManager.getInstance().registerAbortedFunction(transactionBlockId, fpAborted);
+        }
+
         LocalTransactionInfo localTransactionInfo = ctx.getLocalTransactionInfo();
         boolean isInitiator = true;
         if (localTransactionInfo == null) {
-            BValue[] returns = notifyTransactionBegin(ctx, null,  null, transactionBlockId,
-                            TransactionConstants.DEFAULT_COORDINATION_TYPE, isInitiator);
-            BStruct txDataStruct = (BStruct) returns[0];
-            String globalTransactionId = txDataStruct.getStringField(1);
-            String protocol = txDataStruct.getStringField(2);
-            String url = txDataStruct.getStringField(3);
+            String globalTransactionId;
+            String protocol = null;
+            String url = null;
+            if (isGlobalTransactionEnabled) {
+                BValue[] returns = notifyTransactionBegin(ctx, null, null, transactionBlockId,
+                        TransactionConstants.DEFAULT_COORDINATION_TYPE, isInitiator);
+                BStruct txDataStruct = (BStruct) returns[0];
+                globalTransactionId = txDataStruct.getStringField(1);
+                protocol = txDataStruct.getStringField(2);
+                url = txDataStruct.getStringField(3);
+            } else {
+                globalTransactionId = UUID.randomUUID().toString().replaceAll("-", "");
+            }
             localTransactionInfo = new LocalTransactionInfo(globalTransactionId, url, protocol);
             ctx.setLocalTransactionInfo(localTransactionInfo);
         } else {
-            isInitiator = false;
-            notifyTransactionBegin(ctx, localTransactionInfo.getGlobalTransactionId(), localTransactionInfo.getURL(),
-                    transactionBlockId, localTransactionInfo.getProtocol(), isInitiator);
+            if (isGlobalTransactionEnabled) {
+                isInitiator = false;
+                notifyTransactionBegin(ctx, localTransactionInfo.getGlobalTransactionId(),
+                        localTransactionInfo.getURL(), transactionBlockId, localTransactionInfo.getProtocol(),
+                        isInitiator);
+            }
         }
         localTransactionInfo.beginTransactionBlock(transactionBlockId, retryCount);
     }
@@ -2626,22 +2705,42 @@ public class CPU {
 
     private static void endTransaction(WorkerExecutionContext ctx, int transactionBlockId, int status) {
         LocalTransactionInfo localTransactionInfo = ctx.getLocalTransactionInfo();
-        boolean notifyCoorinator;
+        boolean isGlobalTransactionEnabled = ctx.getGlobalTransactionEnabled();
+        boolean notifyCoordinator;
         try {
             //In success case no need to do anything as with the transaction end phase it will be committed.
             if (status == TransactionStatus.FAILED.value()) {
-                notifyCoorinator = localTransactionInfo.onTransactionFailed(transactionBlockId);
-                if (notifyCoorinator) {
-                    notifyTransactionAbort(ctx, localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
+                notifyCoordinator = localTransactionInfo.onTransactionFailed(transactionBlockId);
+                if (notifyCoordinator) {
+                    if (isGlobalTransactionEnabled) {
+                        notifyTransactionAbort(ctx, localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
+                    } else {
+                        TransactionResourceManager.getInstance()
+                                .notifyAbort(localTransactionInfo.getGlobalTransactionId(), transactionBlockId, false);
+                    }
                 }
             } else if (status == TransactionStatus.ABORTED.value()) {
-                notifyCoorinator = localTransactionInfo.onTransactionAbort();
-                if (notifyCoorinator) {
-                    notifyTransactionAbort(ctx, localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
+                notifyCoordinator = localTransactionInfo.onTransactionAbort();
+                if (notifyCoordinator) {
+                    if (isGlobalTransactionEnabled) {
+                        notifyTransactionAbort(ctx, localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
+                    } else {
+                        TransactionResourceManager.getInstance()
+                                .notifyAbort(localTransactionInfo.getGlobalTransactionId(), transactionBlockId, false);
+                    }
+                }
+            } else if (status == TransactionStatus.SUCCESS.value()) {
+                //We dont' need to notify the coordinator in this case. If it does not receive abort from the tx
+                //it will commit at the end message
+                if (!isGlobalTransactionEnabled) {
+                    TransactionResourceManager.getInstance()
+                            .prepare(localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
+                    TransactionResourceManager.getInstance()
+                            .notifyCommit(localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
                 }
             } else if (status == TransactionStatus.END.value()) { //status = 1 Transaction end
-                notifyCoorinator = localTransactionInfo.onTransactionEnd(transactionBlockId);
-                if (notifyCoorinator) {
+                notifyCoordinator = localTransactionInfo.onTransactionEnd(transactionBlockId);
+                if (notifyCoordinator && isGlobalTransactionEnabled) {
                     notifyTransactionEnd(ctx, localTransactionInfo.getGlobalTransactionId(), transactionBlockId);
                     BLangVMUtils.removeTransactionInfo(ctx);
                 }
@@ -2691,7 +2790,7 @@ public class CPU {
 
     private static WorkerExecutionContext invokeVirtualFunction(WorkerExecutionContext ctx, int receiver,
                                                                 FunctionInfo virtualFuncInfo, int[] argRegs,
-                                                                int[] retRegs) {
+                                                                int[] retRegs, boolean async) {
         BStruct structVal = (BStruct) ctx.workerLocal.refRegs[receiver];
         if (structVal == null) {
             ctx.setError(BLangVMErrors.createNullRefException(ctx));
@@ -2702,11 +2801,16 @@ public class CPU {
         StructInfo structInfo = structVal.getType().structInfo;
         AttachedFunctionInfo attachedFuncInfo = structInfo.funcInfoEntries.get(virtualFuncInfo.getName());
         FunctionInfo concreteFuncInfo = attachedFuncInfo.functionInfo;
-        return BLangFunctions.invokeCallable(concreteFuncInfo, ctx, argRegs, retRegs, false);
+
+        //TODO: find a way to only trace connectors
+        // BLangVMUtils.initClientConnectorTrace(ctx, concreteFuncInfo.attachedToType.toString(),
+        //          concreteFuncInfo.getName());
+
+        return BLangFunctions.invokeCallable(concreteFuncInfo, ctx, argRegs, retRegs, false, async);
     }
 
     private static WorkerExecutionContext invokeAction(WorkerExecutionContext ctx, String actionName, int[] argRegs,
-                                                       int[] retRegs) {
+                                                       int[] retRegs, boolean async) {
         BConnector connector = (BConnector) ctx.workerLocal.refRegs[argRegs[0]];
         if (connector == null) {
             ctx.setError(BLangVMErrors.createNullRefException(ctx));
@@ -2718,23 +2822,24 @@ public class CPU {
         ActionInfo actionInfo = ctx.programFile.getPackageInfo(actualCon.getPackagePath())
                 .getConnectorInfo(actualCon.getName()).getActionInfo(actionName);
 
-        BLangVMUtils.initClientConnectorTrace(ctx, actualCon, actionName);
+        //TODO: find a way to only trace connectors
+        // BLangVMUtils.initClientConnectorTrace(ctx, actualCon, actionName);
 
-        return BLangFunctions.invokeCallable(actionInfo, ctx, argRegs, retRegs, false);
+        return BLangFunctions.invokeCallable(actionInfo, ctx, argRegs, retRegs, false, async);
     }
 
     @SuppressWarnings("rawtypes")
-    private static void handleWorkerSend(WorkerExecutionContext ctx, WorkerDataChannelInfo workerDataChannelInfo, 
+    private static void handleWorkerSend(WorkerExecutionContext ctx, WorkerDataChannelInfo workerDataChannelInfo,
             BType[] types, int[] regs) {
         BRefType[] vals = extractValues(ctx.workerLocal, types, regs);
         WorkerDataChannel dataChannel = getWorkerChannel(ctx, workerDataChannelInfo.getChannelName());
         dataChannel.putData(vals);
     }
-    
+
     private static WorkerDataChannel getWorkerChannel(WorkerExecutionContext ctx, String name) {
         return ctx.respCtx.getWorkerDataChannel(name);
     }
-    
+
     @SuppressWarnings("rawtypes")
     private static BRefType[] extractValues(WorkerData data, BType[] types, int[] regs) {
         BRefType[] result = new BRefType[types.length];
@@ -2783,7 +2888,7 @@ public class CPU {
             return false;
         }
     }
-    
+
     @SuppressWarnings("rawtypes")
     public static void copyArgValuesForWorkerReceive(WorkerData currentSF, int[] argRegs, BType[] paramTypes,
                                                      BRefType[] passedInValues) {
@@ -3553,6 +3658,13 @@ public class CPU {
         BNewArray newArray = (BNewArray) entity;
         sf.longRegs[j] = newArray.size();
         return;
+    }
+    
+    private static void execAsync(WorkerExecutionContext ctx) {        
+    }
+    
+    private static WorkerExecutionContext execAwait(WorkerExecutionContext ctx) {
+        return null;
     }
 
     /**

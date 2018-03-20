@@ -31,7 +31,6 @@ import org.wso2.ballerinalang.compiler.semantics.model.SymbolTable;
 import org.wso2.ballerinalang.compiler.semantics.model.symbols.BConnectorSymbol;
 import org.wso2.ballerinalang.compiler.semantics.model.symbols.BInvokableSymbol;
 import org.wso2.ballerinalang.compiler.semantics.model.symbols.BPackageSymbol;
-import org.wso2.ballerinalang.compiler.semantics.model.symbols.BServiceSymbol;
 import org.wso2.ballerinalang.compiler.semantics.model.symbols.BStructSymbol;
 import org.wso2.ballerinalang.compiler.semantics.model.symbols.BStructSymbol.BAttachedFunction;
 import org.wso2.ballerinalang.compiler.semantics.model.symbols.BSymbol;
@@ -44,6 +43,7 @@ import org.wso2.ballerinalang.compiler.semantics.model.types.BArrayType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BConnectorType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BEnumType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BInvokableType;
+import org.wso2.ballerinalang.compiler.semantics.model.types.BStreamletType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BStructType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BType;
 import org.wso2.ballerinalang.compiler.tree.BLangAction;
@@ -63,6 +63,7 @@ import org.wso2.ballerinalang.compiler.tree.BLangNodeVisitor;
 import org.wso2.ballerinalang.compiler.tree.BLangPackage;
 import org.wso2.ballerinalang.compiler.tree.BLangResource;
 import org.wso2.ballerinalang.compiler.tree.BLangService;
+import org.wso2.ballerinalang.compiler.tree.BLangStreamlet;
 import org.wso2.ballerinalang.compiler.tree.BLangStruct;
 import org.wso2.ballerinalang.compiler.tree.BLangTransformer;
 import org.wso2.ballerinalang.compiler.tree.BLangVariable;
@@ -95,6 +96,7 @@ import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLang
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLangMapLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLangRecordKey;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLangRecordKeyValue;
+import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLangStreamLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLangStructLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangRecordLiteral.BLangTableLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangSimpleVarRef.BLangFieldVarRef;
@@ -128,6 +130,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangNext;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangReturn;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangStatement;
@@ -165,6 +168,7 @@ import org.wso2.ballerinalang.programfile.PackageVarInfo;
 import org.wso2.ballerinalang.programfile.ProgramFile;
 import org.wso2.ballerinalang.programfile.ResourceInfo;
 import org.wso2.ballerinalang.programfile.ServiceInfo;
+import org.wso2.ballerinalang.programfile.StreamletInfo;
 import org.wso2.ballerinalang.programfile.StructFieldInfo;
 import org.wso2.ballerinalang.programfile.StructInfo;
 import org.wso2.ballerinalang.programfile.TransformerInfo;
@@ -186,6 +190,7 @@ import org.wso2.ballerinalang.programfile.cpentries.ForkJoinCPEntry;
 import org.wso2.ballerinalang.programfile.cpentries.FunctionRefCPEntry;
 import org.wso2.ballerinalang.programfile.cpentries.IntegerCPEntry;
 import org.wso2.ballerinalang.programfile.cpentries.PackageRefCPEntry;
+import org.wso2.ballerinalang.programfile.cpentries.StreamletRefCPEntry;
 import org.wso2.ballerinalang.programfile.cpentries.StringCPEntry;
 import org.wso2.ballerinalang.programfile.cpentries.StructureRefCPEntry;
 import org.wso2.ballerinalang.programfile.cpentries.TransformerRefCPEntry;
@@ -388,6 +393,7 @@ public class CodeGenerator extends BLangNodeVisitor {
         pkgNode.structs.forEach(this::createStructInfoEntry);
         pkgNode.enums.forEach(this::createEnumInfoEntry);
         pkgNode.connectors.forEach(this::createConnectorInfoEntry);
+        pkgNode.streamlets.forEach(this::createStreamletInfoEntry);
         pkgNode.functions.forEach(this::createFunctionInfoEntry);
         pkgNode.services.forEach(this::createServiceInfoEntry);
         pkgNode.functions.forEach(this::createFunctionInfoEntry);
@@ -498,6 +504,11 @@ public class CodeGenerator extends BLangNodeVisitor {
 
     public void visit(BLangVariableDef varDefNode) {
         genNode(varDefNode.var, this.env);
+    }
+
+    @Override
+    public void visit(BLangMatch matchStmt) {
+        // TODO
     }
 
     public void visit(BLangReturn returnNode) {
@@ -682,11 +693,12 @@ public class CodeGenerator extends BLangNodeVisitor {
         if (structLiteral.initializer != null) {
             int funcRefCPIndex = getFuncRefCPIndex(structLiteral.initializer.symbol);
             // call funcRefCPIndex 1 structRegIndex 0
-            Operand[] operands = new Operand[4];
+            Operand[] operands = new Operand[5];
             operands[0] = getOperand(funcRefCPIndex);
-            operands[1] = getOperand(1);
-            operands[2] = structRegIndex;
-            operands[3] = getOperand(0);
+            operands[1] = getOperand(false);
+            operands[2] = getOperand(1);
+            operands[3] = structRegIndex;
+            operands[4] = getOperand(0);
             emit(InstructionCodes.CALL, operands);
         }
 
@@ -703,10 +715,35 @@ public class CodeGenerator extends BLangNodeVisitor {
     }
 
     @Override
+    public void visit(BLangRecordLiteral.BLangStreamletLiteral streamletLiteral) {
+
+        BSymbol streamletSymbol = streamletLiteral.type.tsymbol;
+        int pkgCPIndex = addPackageRefCPEntry(currentPkgInfo, streamletSymbol.pkgID);
+        int streamletNameCPIndex = addUTF8CPEntry(currentPkgInfo, streamletSymbol.name.value);
+
+        StreamletRefCPEntry streamletRefCPEntry = new StreamletRefCPEntry(pkgCPIndex, streamletNameCPIndex);
+        Operand streamletCPIndex = getOperand(currentPkgInfo.addCPEntry(streamletRefCPEntry));
+
+        //Emit an instruction to create a new streamlet.
+        RegIndex streamletRegIndex = calcAndGetExprRegIndex(streamletLiteral);
+        emit(InstructionCodes.NEWSTREAMLET, streamletCPIndex, streamletRegIndex);
+    }
+
+    @Override
     public void visit(BLangTableLiteral tableLiteral) {
         tableLiteral.regIndex = calcAndGetExprRegIndex(tableLiteral);
         Operand typeCPIndex = getTypeCPIndex(tableLiteral.type);
         emit(InstructionCodes.NEWTABLE, tableLiteral.regIndex, typeCPIndex);
+    }
+
+    @Override
+    public void visit(BLangStreamLiteral streamLiteral) {
+        streamLiteral.regIndex = calcAndGetExprRegIndex(streamLiteral);
+        Operand typeCPIndex = getTypeCPIndex(streamLiteral.type);
+        StringCPEntry nameCPEntry = new StringCPEntry(addUTF8CPEntry(currentPkgInfo, streamLiteral.name.value),
+                                                        streamLiteral.name.value);
+        Operand nameCPIndex = getOperand(currentPkgInfo.addCPEntry(nameCPEntry));
+        emit(InstructionCodes.NEWSTREAM, streamLiteral.regIndex, typeCPIndex, nameCPIndex);
     }
 
     @Override
@@ -997,13 +1034,15 @@ public class CodeGenerator extends BLangNodeVisitor {
         int initFuncNameIndex = addUTF8CPEntry(currentPkgInfo, initFunc.name.value);
         FunctionRefCPEntry funcRefCPEntry = new FunctionRefCPEntry(pkgRefCPIndex, initFuncNameIndex);
         Operand initFuncRefCPIndex = getOperand(currentPkgInfo.addCPEntry(funcRefCPEntry));
-        Operand[] operands = new Operand[]{initFuncRefCPIndex, getOperand(1), connectorRegIndex, getOperand(0)};
+        Operand[] operands = new Operand[] { initFuncRefCPIndex, getOperand(false), getOperand(1), 
+                connectorRegIndex, getOperand(0) };
         emit(InstructionCodes.CALL, operands);
 
         int actionNameCPIndex = addUTF8CPEntry(currentPkgInfo, "<init>");
         ActionRefCPEntry actionRefCPEntry = new ActionRefCPEntry(pkgRefCPIndex, actionNameCPIndex);
         Operand actionRefCPIndex = getOperand(currentPkgInfo.addCPEntry(actionRefCPEntry));
-        operands = new Operand[]{actionRefCPIndex, getOperand(1), connectorRegIndex, getOperand(0)};
+        operands = new Operand[] { actionRefCPIndex, getOperand(false), getOperand(1), connectorRegIndex, 
+                getOperand(0) };
         emit(InstructionCodes.ACALL, operands);
     }
 
@@ -1065,6 +1104,7 @@ public class CodeGenerator extends BLangNodeVisitor {
         if (opcode == InstructionCodes.ANY2T ||
                 opcode == InstructionCodes.ANY2C ||
                 opcode == InstructionCodes.ANY2E ||
+                opcode == InstructionCodes.ANY2M ||
                 opcode == InstructionCodes.CHECKCAST) {
             Operand typeCPIndex = getTypeCPIndex(castExpr.type);
             emit(opcode, castExpr.expr.regIndex, typeCPIndex, castExprRegIndex, errorRegIndex);
@@ -1202,6 +1242,10 @@ public class CodeGenerator extends BLangNodeVisitor {
         return "(" + generateSig(callableUnitInfo.paramTypes) + ")";
     }
 
+    private String generateStreamletSig(StreamletInfo streamletInfo) {
+        return "(" + generateSig(streamletInfo.paramTypes) + ")";
+    }
+
     private int getNextIndex(int typeTag, VariableIndex indexes) {
         int index;
         switch (typeTag) {
@@ -1256,6 +1300,10 @@ public class CodeGenerator extends BLangNodeVisitor {
 
     private Operand getOperand(int value) {
         return new Operand(value);
+    }
+    
+    private Operand getOperand(boolean value) {
+        return new Operand(value ? 1 : 0);
     }
 
     private RegIndex getLVIndex(int typeTag) {
@@ -1546,8 +1594,9 @@ public class CodeGenerator extends BLangNodeVisitor {
         int i = 0;
         int nArgRegs = iExpr.requiredArgs.size() + iExpr.namedArgs.size() + iExpr.restArgs.size();
         int nRetRegs = iExpr.types.size();
-        Operand[] operands = new Operand[nArgRegs + nRetRegs + 3];
+        Operand[] operands = new Operand[nArgRegs + nRetRegs + 4];
         operands[i++] = getOperand(funcRefCPIndex);
+        operands[i++] = getOperand(iExpr.async);
         operands[i++] = getOperand(nArgRegs);
 
         // Write required arguments
@@ -1594,7 +1643,7 @@ public class CodeGenerator extends BLangNodeVisitor {
 
         CallableUnitInfo callableUnitInfo;
         if (iExpr.symbol.kind == SymbolKind.FUNCTION) {
-            callableUnitInfo = pkgInfo.functionInfoMap.get(iExpr.name.value);
+            callableUnitInfo = pkgInfo.functionInfoMap.get(iExpr.symbol.name.value);
         } else if (iExpr.symbol.kind == SymbolKind.ACTION) {
             ConnectorInfo connectorInfo = pkgInfo.connectorInfoMap.get(iExpr.symbol.owner.name.value);
             callableUnitInfo = connectorInfo.actionInfoMap.get(iExpr.symbol.name.value);
@@ -1709,7 +1758,7 @@ public class CodeGenerator extends BLangNodeVisitor {
 
         return defaultValue;
     }
-    
+
     private DefaultValueAttributeInfo getDefaultValueAttributeInfo(BLangLiteral literalExpr) {
         DefaultValue defaultValue = getDefaultValue(literalExpr);
         UTF8CPEntry defaultValueAttribUTF8CPEntry =
@@ -1878,6 +1927,26 @@ public class CodeGenerator extends BLangNodeVisitor {
         }
     }
 
+    private void createStreamletInfoEntry(BLangStreamlet streamletNode) {
+        BStreamletType streamletType = (BStreamletType) streamletNode.symbol.type;
+        // Add streamlet name as an UTFCPEntry to the constant pool
+        int streamletNameCPIndex = addUTF8CPEntry(currentPkgInfo, streamletNode.name.value);
+        //Create streamlet info
+        StreamletInfo streamletInfo = new StreamletInfo(currentPackageRefCPIndex,
+                streamletNameCPIndex, streamletNode.symbol.flags);
+
+        streamletInfo.paramTypes = streamletType.paramTypes.toArray(new BType[0]);
+        streamletInfo.signatureCPIndex = addUTF8CPEntry(this.currentPkgInfo, generateStreamletSig(streamletInfo));
+
+        // Add Siddhi Query as an UTFCPEntry to the constant pool
+        streamletInfo.siddhiQueryCPIndex = addUTF8CPEntry(currentPkgInfo, streamletNode.getSiddhiQuery());
+
+        // Add StreamIds as an UTFCPEntry to the constant pool
+        streamletInfo.streamIdsAsStringCPIndex = addUTF8CPEntry(currentPkgInfo, streamletNode.getStreamIdsAsString());
+
+        currentPkgInfo.addStreamletInfo(streamletNode.name.value, streamletInfo);
+    }
+
     private void createConnectorInfoEntry(BLangConnector connectorNode) {
         BConnectorType connectorType = (BConnectorType) connectorNode.symbol.type;
         // Add connector name as an UTFCPEntry to the constant pool
@@ -1941,8 +2010,8 @@ public class CodeGenerator extends BLangNodeVisitor {
         // Add service name as an UTFCPEntry to the constant pool
         int serviceNameCPIndex = addUTF8CPEntry(currentPkgInfo, serviceNode.name.value);
         //Create service info
-        if (((BServiceSymbol) serviceNode.symbol).endpointType != null) {
-            String endPointQName = ((BServiceSymbol) serviceNode.symbol).endpointType.tsymbol.toString();
+        if (serviceNode.endpointType != null) {
+            String endPointQName = serviceNode.endpointType.tsymbol.toString();
             int epNameCPIndex = addUTF8CPEntry(currentPkgInfo, endPointQName);
             ServiceInfo serviceInfo = new ServiceInfo(currentPackageRefCPIndex, serviceNameCPIndex,
                     serviceNode.symbol.flags, epNameCPIndex);
@@ -2357,6 +2426,12 @@ public class CodeGenerator extends BLangNodeVisitor {
     public void visit(BLangStruct structNode) {
     }
 
+    public void visit(BLangStreamlet streamletNode) {
+        StreamletInfo currentStreamletInfo = currentPkgInfo.getStreamletInfo(streamletNode.getName().getValue());
+        currentStreamletInfo.setSiddhiQuery(streamletNode.getSiddhiQuery());
+        currentStreamletInfo.setStreamIdsAsString(streamletNode.getStreamIdsAsString());
+    }
+
     public void visit(BLangIdentifier identifierNode) {
         /* ignore */
     }
@@ -2576,6 +2651,18 @@ public class CodeGenerator extends BLangNodeVisitor {
             retryCountRegIndex = transactionNode.retryCount.regIndex;
         }
 
+        Operand committedFuncRegIndex = new RegIndex(-1, TypeTags.INVOKABLE);
+        if (transactionNode.onCommitFunction != null) {
+            committedFuncRegIndex.value = getFuncRefCPIndex(
+                    (BInvokableSymbol) ((BLangFunctionVarRef) transactionNode.onCommitFunction).symbol);
+        }
+
+        Operand abortedFuncRegIndex = new RegIndex(-1, TypeTags.INVOKABLE);
+        if (transactionNode.onAbortFunction != null) {
+            abortedFuncRegIndex.value = getFuncRefCPIndex(
+                    (BInvokableSymbol) ((BLangFunctionVarRef) transactionNode.onAbortFunction).symbol);
+        }
+
         ErrorTableAttributeInfo errorTable = createErrorTableIfAbsent(currentPkgInfo);
         Operand transStmtEndAddr = getOperand(-1);
         Operand transStmtAbortEndAddr = getOperand(-1);
@@ -2583,7 +2670,8 @@ public class CodeGenerator extends BLangNodeVisitor {
         abortInstructions.push(gotoFailedTransBlockEnd);
 
         //start transaction
-        this.emit(InstructionCodes.TR_BEGIN, transactionIndexOperand, retryCountRegIndex);
+        this.emit(InstructionCodes.TR_BEGIN, transactionIndexOperand, retryCountRegIndex, committedFuncRegIndex,
+                abortedFuncRegIndex);
         Operand transBlockStartAddr = getOperand(nextIP());
 
         //retry transaction;
@@ -2604,8 +2692,8 @@ public class CodeGenerator extends BLangNodeVisitor {
         // CodeGen for error handling.
         int errorTargetIP = nextIP();
         emit(InstructionCodes.TR_END, transactionIndexOperand, getOperand(TransactionStatus.FAILED.value()));
-        if (transactionNode.failedBody != null) {
-            this.genNode(transactionNode.failedBody, this.env);
+        if (transactionNode.onRetryBody != null) {
+            this.genNode(transactionNode.onRetryBody, this.env);
 
         }
         emit(InstructionCodes.GOTO, transBlockStartAddr);

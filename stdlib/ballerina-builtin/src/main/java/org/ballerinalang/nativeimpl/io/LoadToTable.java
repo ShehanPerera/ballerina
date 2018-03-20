@@ -27,7 +27,7 @@ import org.ballerinalang.model.types.TypeKind;
 import org.ballerinalang.model.types.TypeTags;
 import org.ballerinalang.model.values.BStruct;
 import org.ballerinalang.model.values.BTable;
-import org.ballerinalang.model.values.BTypeValue;
+import org.ballerinalang.model.values.BTypeDescValue;
 import org.ballerinalang.nativeimpl.io.channels.FileIOChannel;
 import org.ballerinalang.nativeimpl.io.channels.base.CharacterChannel;
 import org.ballerinalang.nativeimpl.io.channels.base.DelimitedRecordChannel;
@@ -83,13 +83,13 @@ public class LoadToTable implements NativeCallableUnit {
         } catch (InvalidPathException e) {
             String msg = "Unable to resolve the file path[" + filePath + "]: " + e.getMessage();
             context.setReturnValues(null, IOUtils.createError(context, msg));
-            callback.onSuccess();
+            callback.notifySuccess();
             return;
         }
         if (Files.notExists(path)) {
             String msg = "Unable to find a file in given path: " + filePath;
             context.setReturnValues(null, IOUtils.createError(context, msg));
-            callback.onSuccess();
+            callback.notifySuccess();
             return;
         }
         try {
@@ -133,12 +133,12 @@ public class LoadToTable implements NativeCallableUnit {
             }
         }
         CallableUnitCallback callback = eventContext.getCallback();
-        callback.onSuccess();
+        callback.notifySuccess();
         return result;
     }
 
     private static BTable getbTable(Context context, List records) throws BallerinaIOException {
-        BTypeValue type = (BTypeValue) context.getRefArgument(0);
+        BTypeDescValue type = (BTypeDescValue) context.getRefArgument(0);
         BTable table = new BTable(new BTableType(type.value()));
         BStructType structType = (BStructType) type.value();
         boolean skipHeaderLine = context.getBooleanArgument(0);

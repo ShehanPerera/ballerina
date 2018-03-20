@@ -19,11 +19,15 @@ package org.wso2.ballerinalang.compiler.semantics.model.symbols;
 
 import org.ballerinalang.model.elements.PackageID;
 import org.ballerinalang.model.symbols.SymbolKind;
+import org.ballerinalang.model.tree.OperatorKind;
+import org.wso2.ballerinalang.compiler.semantics.analyzer.Types;
 import org.wso2.ballerinalang.compiler.semantics.model.Scope;
+import org.wso2.ballerinalang.compiler.semantics.model.SymbolTable;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BInvokableType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BType;
 import org.wso2.ballerinalang.compiler.util.Name;
 import org.wso2.ballerinalang.compiler.util.Names;
+import org.wso2.ballerinalang.programfile.InstructionCodes;
 import org.wso2.ballerinalang.util.Flags;
 import org.wso2.ballerinalang.util.Lists;
 
@@ -51,7 +55,7 @@ public class Symbols {
                                                BSymbol owner) {
         BTypeSymbol typeSymbol = createTypeSymbol(SymTag.ENUM, flags, name, pkgID, type, owner);
         typeSymbol.kind = SymbolKind.ENUM;
-        return typeSymbol;    
+        return typeSymbol;
     }
 
     @Deprecated
@@ -103,6 +107,16 @@ public class Symbols {
         return serviceSymbol;
     }
 
+    public static BStreamletSymbol createStreamletSymbol(int flags,
+                                                    Name name,
+                                                    PackageID pkgID,
+                                                    BType type,
+                                                    BSymbol owner) {
+        BStreamletSymbol typeSymbol = createStreamletSymbol(SymTag.STREAMLET, flags, name, pkgID, type, owner);
+        typeSymbol.kind = SymbolKind.STREAMLET;
+        return typeSymbol;
+    }
+
     public static BInvokableSymbol createFunctionSymbol(int flags,
                                                         Name name,
                                                         PackageID pkgID,
@@ -142,6 +156,15 @@ public class Symbols {
         return new BTypeSymbol(symTag, flags, name, pkgID, type, owner);
     }
 
+    public static BStreamletSymbol createStreamletSymbol(int symTag,
+                                                         int flags,
+                                                         Name name,
+                                                         PackageID pkgID,
+                                                         BType type,
+                                                         BSymbol owner) {
+        return new BStreamletSymbol(symTag, flags, name, pkgID, type, owner);
+    }
+
     public static BInvokableSymbol createInvokableSymbol(int kind,
                                                          int flags,
                                                          Name name,
@@ -176,12 +199,12 @@ public class Symbols {
     }
 
     public static BConversionOperatorSymbol createConversionOperatorSymbol(BType sourceType,
-                                                               BType targetType,
-                                                               BType errorType,
-                                                               boolean safe,
-                                                               int opcode,
-                                                               PackageID pkgID,
-                                                               BSymbol owner) {
+                                                                           BType targetType,
+                                                                           BType errorType,
+                                                                           boolean safe,
+                                                                           int opcode,
+                                                                           PackageID pkgID,
+                                                                           BSymbol owner) {
         List<BType> paramTypes = Lists.of(sourceType, targetType);
         List<BType> retTypes = Lists.of(targetType, errorType);
         BInvokableType opType = new BInvokableType(paramTypes, retTypes, null);
@@ -189,7 +212,7 @@ public class Symbols {
         symbol.kind = SymbolKind.CONVERSION_OPERATOR;
         return symbol;
     }
-    
+
     public static BTransformerSymbol createTransformerSymbol(int flags,
                                                              Name name,
                                                              PackageID pkgID,
@@ -200,6 +223,20 @@ public class Symbols {
         symbol.kind = SymbolKind.TRANSFORMER;
         symbol.scope = new Scope(symbol);
         return symbol;
+    }
+
+    public static BOperatorSymbol createTypeofOperatorSymbol(BType exprType, Types types,
+                                                             SymbolTable symTable, Names names) {
+        List<BType> paramTypes = Lists.of(exprType);
+        List<BType> retTypes = Lists.of(symTable.typeDesc);
+        BInvokableType opType = new BInvokableType(paramTypes, retTypes, null);
+        if (types.isValueType(exprType)) {
+            return new BOperatorSymbol(names.fromString(OperatorKind.TYPEOF.value()),
+                    symTable.rootPkgSymbol.pkgID, opType, symTable.rootPkgSymbol, InstructionCodes.TYPELOAD);
+        } else {
+            return new BOperatorSymbol(names.fromString(OperatorKind.TYPEOF.value()),
+                    symTable.rootPkgSymbol.pkgID, opType, symTable.rootPkgSymbol, InstructionCodes.TYPEOF);
+        }
     }
 
     public static String getAttachedFuncSymbolName(String typeName, String funcName) {

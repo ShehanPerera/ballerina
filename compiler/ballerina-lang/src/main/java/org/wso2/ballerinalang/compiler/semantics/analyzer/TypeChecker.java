@@ -46,6 +46,7 @@ import org.wso2.ballerinalang.compiler.semantics.model.symbols.Symbols;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BArrayType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BConnectorType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BEnumType;
+import org.wso2.ballerinalang.compiler.semantics.model.types.BFutureType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BInvokableType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BJSONType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BMapType;
@@ -53,6 +54,7 @@ import org.wso2.ballerinalang.compiler.semantics.model.types.BStructType;
 import org.wso2.ballerinalang.compiler.semantics.model.types.BType;
 import org.wso2.ballerinalang.compiler.tree.BLangIdentifier;
 import org.wso2.ballerinalang.compiler.tree.BLangNodeVisitor;
+import org.wso2.ballerinalang.compiler.tree.BLangStreamlet;
 import org.wso2.ballerinalang.compiler.tree.clauses.BLangGroupBy;
 import org.wso2.ballerinalang.compiler.tree.clauses.BLangHaving;
 import org.wso2.ballerinalang.compiler.tree.clauses.BLangJoinStreamingInput;
@@ -101,13 +103,12 @@ import org.wso2.ballerinalang.compiler.util.Names;
 import org.wso2.ballerinalang.compiler.util.TypeTags;
 import org.wso2.ballerinalang.compiler.util.diagnotic.BLangDiagnosticLog;
 import org.wso2.ballerinalang.compiler.util.diagnotic.DiagnosticPos;
-import org.wso2.ballerinalang.programfile.InstructionCodes;
 import org.wso2.ballerinalang.util.Lists;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-
 import javax.xml.XMLConstants;
 
 /**
@@ -247,6 +248,8 @@ public class TypeChecker extends BLangNodeVisitor {
                 expTypeTag == TypeTags.STRUCT ||
                 expTypeTag == TypeTags.TABLE ||
                 expTypeTag == TypeTags.NONE ||
+                expTypeTag == TypeTags.STREAM ||
+                expTypeTag == TypeTags.STREAMLET ||
                 expTypeTag == TypeTags.ANY) {
             recordLiteral.keyValuePairs.forEach(keyValuePair ->
                     checkRecLiteralKeyValue(keyValuePair, expTypes.get(0)));
@@ -490,6 +493,12 @@ public class TypeChecker extends BLangNodeVisitor {
             case TypeTags.TABLE:
                 checkFunctionInvocationExpr(iExpr, symTable.tableType);
                 break;
+            case TypeTags.STREAM:
+                checkFunctionInvocationExpr(iExpr, symTable.streamType);
+                break;
+            case TypeTags.STREAMLET:
+                checkFunctionInvocationExpr(iExpr, symTable.streamletType);
+                break;
             case TypeTags.ARRAY:
             case TypeTags.TUPLE_COLLECTION:
                 dlog.error(iExpr.pos, DiagnosticCode.INVALID_FUNCTION_INVOCATION, iExpr.expr.type);
@@ -573,7 +582,7 @@ public class TypeChecker extends BLangNodeVisitor {
     }
 
     public void visit(BLangTypeofExpr accessExpr) {
-        BType actualType = symTable.typeType;
+        BType actualType = symTable.typeDesc;
         accessExpr.resolvedType = symResolver.resolveTypeNode(accessExpr.typeNode, env);
         resultTypes = types.checkTypes(accessExpr, Lists.of(actualType), expTypes);
     }
@@ -606,20 +615,8 @@ public class TypeChecker extends BLangNodeVisitor {
                 exprType = checkExpr(unaryExpr.expr, env).get(0);
             }
             if (exprType != symTable.errType) {
-                List<BType> paramTypes = Lists.of(exprType);
-                List<BType> retTypes = Lists.of(symTable.typeType);
-                BInvokableType opType = new BInvokableType(paramTypes, retTypes, null);
-                if (!types.isValueType(exprType)) {
-                    BOperatorSymbol symbol = new BOperatorSymbol(names.fromString(OperatorKind.TYPEOF.value()),
-                            symTable.rootPkgSymbol.pkgID, opType, symTable.rootPkgSymbol, InstructionCodes.TYPEOF);
-                    unaryExpr.opSymbol = symbol;
-                    actualType = symbol.type.getReturnTypes().get(0);
-                } else {
-                    BOperatorSymbol symbol = new BOperatorSymbol(names.fromString(OperatorKind.TYPEOF.value()),
-                            symTable.rootPkgSymbol.pkgID, opType, symTable.rootPkgSymbol, InstructionCodes.TYPELOAD);
-                    unaryExpr.opSymbol = symbol;
-                    actualType = symbol.type.getReturnTypes().get(0);
-                }
+                unaryExpr.opSymbol = Symbols.createTypeofOperatorSymbol(exprType, types, symTable, names);
+                actualType = unaryExpr.opSymbol.type.getReturnTypes().get(0);
             }
         } else {
             exprType = checkExpr(unaryExpr.expr, env).get(0);
@@ -918,7 +915,7 @@ public class TypeChecker extends BLangNodeVisitor {
 
     @Override
     public void visit(BLangStreamingInput streamingInput) {
-        BLangExpression varRef = (BLangExpression) streamingInput.getTableReference();
+        BLangExpression varRef = (BLangExpression) streamingInput.getStreamReference();
         varRef.accept(this);
     }
 
@@ -931,6 +928,10 @@ public class TypeChecker extends BLangNodeVisitor {
     public void visit(BLangNamedArgsExpression bLangNamedArgsExpression) {
         resultTypes = checkExpr(bLangNamedArgsExpression.expr, env, expTypes);
         bLangNamedArgsExpression.type = bLangNamedArgsExpression.expr.type;
+    }
+
+    public void visit(BLangStreamlet streamletNode){
+        /* ignore */
     }
 
     // Private methods
@@ -1085,6 +1086,8 @@ public class TypeChecker extends BLangNodeVisitor {
             case TypeTags.MAP:
             case TypeTags.JSON:
             case TypeTags.XML:
+            case TypeTags.STREAM:
+            case TypeTags.STREAMLET:
             case TypeTags.TABLE:
             case TypeTags.TUPLE_COLLECTION:
                 return IterableKind.getFromString(iExpr.name.value) != IterableKind.UNDEFINED;
@@ -1152,7 +1155,21 @@ public class TypeChecker extends BLangNodeVisitor {
         }
         checkNamedArgs(iExpr.namedArgs, invocableSymbol.defaultableParams);
         checkRestArgs(iExpr.restArgs, vararg, invocableSymbol.restParam);
-        return invocableSymbol.type.getReturnTypes();
+        
+        if (iExpr.async) {
+            return Arrays.asList(this.generateFutureType(invocableSymbol));
+        } else {
+            return invocableSymbol.type.getReturnTypes();
+        }
+    }
+    
+    private BFutureType generateFutureType(BInvokableSymbol invocableSymbol) {
+        List<BType> retTypes = invocableSymbol.type.getReturnTypes();
+        if (retTypes.isEmpty()) {
+            return new BFutureType(TypeTags.FUTURE, this.symTable.anyType, null);
+        } else {
+            return new BFutureType(TypeTags.FUTURE, retTypes.get(0), null);
+        }
     }
 
     private void checkRequiredArgs(List<BLangExpression> requiredArgExprs, List<? extends Type> reqiredParamTypes) {
@@ -1194,39 +1211,40 @@ public class TypeChecker extends BLangNodeVisitor {
 
     private void checkActionInvocationExpr(BLangInvocation iExpr, BType conType) {
         List<BType> actualTypes = getListWithErrorTypes(expTypes.size());
-        if (conType == symTable.errType
-                || !(conType.tag == TypeTags.STRUCT || conType.tag == TypeTags.CONNECTOR)) {
+        if (conType == symTable.errType || conType.tag != TypeTags.STRUCT || iExpr.expr.symbol.tag != SymTag.ENDPOINT) {
             dlog.error(iExpr.pos, DiagnosticCode.INVALID_ACTION_INVOCATION);
             resultTypes = actualTypes;
             return;
         }
 
-        BSymbol conSymbol;
-        if (iExpr.expr.getKind() == NodeKind.INVOCATION) {
-            final BInvokableSymbol invokableSymbol = (BInvokableSymbol) ((BLangInvocation) iExpr.expr).symbol;
-            conSymbol = ((BInvokableType) invokableSymbol.type).retTypes.get(0).tsymbol;
-        } else {
-            conSymbol = iExpr.expr.symbol;
-            if (conSymbol.tag == SymTag.ENDPOINT) {
-                conSymbol = ((BEndpointVarSymbol) conSymbol).attachedConnector;
-            } else if (conSymbol.tag == SymTag.VARIABLE) {
-                conSymbol = conSymbol.type.tsymbol;
-            }
+        final BEndpointVarSymbol epSymbol = (BEndpointVarSymbol) iExpr.expr.symbol;
+        if (!epSymbol.interactable) {
+            dlog.error(iExpr.pos, DiagnosticCode.ENDPOINT_NOT_SUPPORT_INTERACTIONS, epSymbol.name);
+            resultTypes = actualTypes;
+            return;
         }
+
+        BSymbol conSymbol = epSymbol.clientSymbol;
         if (conSymbol == null
                 || conSymbol == symTable.notFoundSymbol
                 || conSymbol == symTable.errSymbol
-                || conSymbol.tag != SymTag.CONNECTOR) {
+                || conSymbol.tag != SymTag.STRUCT) {
             dlog.error(iExpr.pos, DiagnosticCode.INVALID_ACTION_INVOCATION);
             resultTypes = actualTypes;
             return;
         }
 
+
+
         Name actionName = names.fromIdNode(iExpr.name);
-        BSymbol actionSym = symResolver.lookupMemberSymbol(iExpr.pos, conSymbol.type.tsymbol.scope,
-                env, actionName, SymTag.ACTION);
+
+        Name uniqueFuncName = names.fromString(
+                Symbols.getAttachedFuncSymbolName(conSymbol.name.value, actionName.value));
+        BPackageSymbol packageSymbol = (BPackageSymbol) conSymbol.owner;
+        BSymbol actionSym = symResolver.lookupMemberSymbol(iExpr.pos, packageSymbol.scope, this.env,
+                uniqueFuncName, SymTag.FUNCTION);
         if (actionSym == symTable.errSymbol || actionSym == symTable.notFoundSymbol) {
-            dlog.error(iExpr.pos, DiagnosticCode.UNDEFINED_ACTION, actionName, conSymbol.type);
+            dlog.error(iExpr.pos, DiagnosticCode.UNDEFINED_ACTION, actionName, epSymbol.name, conSymbol.type);
             resultTypes = actualTypes;
             return;
         }
@@ -1580,7 +1598,7 @@ public class TypeChecker extends BLangNodeVisitor {
         typeAccessExpr.typeNode = userDefinedType;
         typeAccessExpr.resolvedType = symResolver.resolveTypeNode(userDefinedType, env);
         typeAccessExpr.pos = varRef.pos;
-        typeAccessExpr.type = symTable.typeType;
+        typeAccessExpr.type = symTable.typeDesc;
         return typeAccessExpr;
     }
 
