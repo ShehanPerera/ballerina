@@ -39,9 +39,9 @@ import org.ballerinalang.net.http.WebSocketService;
 @BallerinaFunction(
         packageName = "ballerina.net.http",
         functionName = "register",
-        receiver = @Receiver(type = TypeKind.STRUCT, structType = "Service",
+        receiver = @Receiver(type = TypeKind.STRUCT, structType = "ServiceEndpoint",
                              structPackage = "ballerina.net.http"),
-        args = {@Argument(name = "serviceType", type = TypeKind.TYPE)},
+        args = {@Argument(name = "serviceType", type = TypeKind.TYPEDESC)},
         isPublic = true
 )
 public class Register extends AbstractHttpNativeFunction {
@@ -57,7 +57,7 @@ public class Register extends AbstractHttpNativeFunction {
             getHttpServicesRegistry(connectorEndpoint).registerService(service);
         }
 
-        if (WebSocketConstants.WEBSOCKET_SERVICE_ENDPOINT_NAME.equals(service.getEndpointName())) {
+        if (WebSocketConstants.WEBSOCKET_ENDPOINT_NAME.equals(service.getEndpointName())) {
             getWebSocketServicesRegistry(connectorEndpoint).registerService(new WebSocketService(service));
         }
 

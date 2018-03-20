@@ -48,13 +48,14 @@ public enum TypeKind {
      */
     BLOB("blob"),
 
-    TYPE("type"),
+    TYPEDESC("typedesc"),
     TABLE("table"),
     STREAM("stream"),
     JSON("json"),
     XML("xml"),
     ANY("any"),
     MAP("map"),
+    FUTURE("future"),
     PACKAGE("package"),
     STRUCT("struct"),
     ENUM("enum"),
@@ -65,6 +66,7 @@ public enum TypeKind {
     FUNCTION("function"),
     ANNOTATION("annotation"),
     ARRAY("[]"),
+    UNION("|"),
     VOID(""),
     NULL("null"),
     NONE(""),
