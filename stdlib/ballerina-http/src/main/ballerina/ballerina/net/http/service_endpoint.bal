@@ -34,11 +34,11 @@ public struct ServiceEndpointConfiguration {
     string host;
     int port;
     KeepAlive keepAlive;
-    TransferEncoding transferEncoding;
+    TransferEncoding|null transferEncoding;
     Chunking chunking;
-    SslConfiguration ssl;
+    ServiceSecureSocket|null secureSocket;
     string httpVersion;
-    RequestLimits requestLimits;
+    RequestLimits|null requestLimits;
     Filter[] filters;
 }
 
@@ -48,33 +48,25 @@ public function <ServiceEndpointConfiguration config> ServiceEndpointConfigurati
     config.keepAlive = KeepAlive.AUTO;
     config.chunking = Chunking.AUTO;
     config.transferEncoding = TransferEncoding.CHUNKING;
+    config.httpVersion = "1.1";
 }
 
-@Field {value:"keyStoreFile: File path to keystore file"}
-@Field {value:"keyStorePassword: The keystore password"}
-@Field {value:"trustStoreFile: File path to truststore file"}
-@Field {value:"trustStorePassword: The truststore password"}
+@Description { value:"SecureSocket struct represents SSL/TLS options to be used for HTTP service" }
+@Field {value: "trustStore: TrustStore related options"}
+@Field {value: "keyStore: KeyStore related options"}
+@Field {value: "protocols: SSL/TLS protocol related options"}
+@Field {value: "validateCert: Certificate validation against CRL or OCSP related options"}
+@Field {value:"ciphers: List of ciphers to be used. eg: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"}
+@Field {value:"hostNameVerificationEnabled: Enable/disable host name verification"}
 @Field {value:"sslVerifyClient: The type of client certificate verification"}
-@Field {value:"certPassword: The certificate password"}
-@Field {value:"sslEnabledProtocols: SSL/TLS protocols to be enabled"}
-@Field {value:"ciphers: List of ciphers to be used"}
-@Field {value:"sslProtocol: The SSL protocol version"}
-@Field {value:"validateCertEnabled: The status of validateCertEnabled {default value : false (disable)}"}
-@Field {value:"cacheSize: Maximum size of the cache"}
-@Field {value:"cacheValidityPeriod: Time duration of cache validity period"}
-public struct SslConfiguration {
-    string keyStoreFile;
-    string keyStorePassword;
-    string trustStoreFile;
-    string trustStorePassword;
-    string sslVerifyClient;
-    string certPassword;
-    string sslEnabledProtocols;
+public struct ServiceSecureSocket {
+    TrustStore trustStore;
+    KeyStore keyStore;
+    Protocols protocols;
+    ValidateCert validateCert;
     string ciphers;
-    string sslProtocol;
-    boolean validateCertEnabled;
-    int cacheSize;
-    int cacheValidityPeriod;
+    string sslVerifyClient;
+    boolean sessionCreation = true;
 }
 
 public enum KeepAlive {
@@ -111,7 +103,7 @@ public native function <ServiceEndpoint ep> start();
 
 @Description { value:"Returns the connector that client code uses"}
 @Return { value:"The connector that client code uses" }
-public native function <ServiceEndpoint ep> getClient() returns (Connection);
+public native function <ServiceEndpoint ep> getClient() returns Connection;
 
 @Description { value:"Stops the registered service"}
 public native function <ServiceEndpoint ep> stop();
@@ -157,7 +149,7 @@ public function <WebSocketEndpoint ep> start() {
 @Return { value:"The connector that client code uses" }
 @Return { value:"Error occured during registration" }
 //TODO make this native
-public function <WebSocketEndpoint ep> getClient() returns (WebSocketConnector) {
+public function <WebSocketEndpoint ep> getClient() returns WebSocketConnector {
     return ep.wsClient.getClient();
 }
 
