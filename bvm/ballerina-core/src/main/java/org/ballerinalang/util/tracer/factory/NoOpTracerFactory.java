@@ -30,6 +30,6 @@ import org.ballerinalang.util.tracer.Tracer;
 public class NoOpTracerFactory implements TracerFactory {
     @Override
     public Tracer getTracer(WorkerExecutionContext ctx, boolean isClientCtx) {
-        return new NoOpTracer();
+        return NoOpTracer.getInstance();
     }
 }
