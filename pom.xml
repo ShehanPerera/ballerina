@@ -938,6 +938,7 @@
                 <module>misc/toml-parser</module>
                 <module>misc/protobuf-ballerina</module>
                 <module>misc/tracing-extensions</module>
+                <module>misc/metrics-extensions</module>
 
                 <module>composer</module>
 
@@ -1022,6 +1023,7 @@
                 <module>misc/toml-parser</module>
                 <module>misc/protobuf-ballerina</module>
                 <module>misc/tracing-extensions</module>
+                <module>misc/metrics-extensions</module>
 
                 <module>composer</module>
 
