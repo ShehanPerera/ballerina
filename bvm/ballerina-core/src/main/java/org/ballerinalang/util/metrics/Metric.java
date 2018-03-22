@@ -17,6 +17,7 @@
  */
 package org.ballerinalang.util.metrics;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,6 +34,22 @@ public interface Metric<M> {
      * @return Metric instance
      */
     M tags(Map<String, String> tags);
+
+    /**
+     * Add tags for this metric.
+     *
+     * @param tags A list of key value pairs to be used as tags
+     * @return Metric instance
+     */
+    M tags(List<Tag> tags);
+
+    /**
+     * Add tags for this metric.
+     *
+     * @param keyValues Key value pairs to be used as tags
+     * @return Metric instance
+     */
+    M tags(String... keyValues);
 
     /**
      * Builder for metrics.

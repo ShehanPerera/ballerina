@@ -33,9 +33,10 @@ public class PrometheusMetricProviderTest {
         Map<String, String> tags = new HashMap<>();
         tags.put("key", "value");
         counter.tags(tags).increment(100D);
+        counter.tags("key", "value").increment(100D);
         Counter counterWithTags = counter.tags(tags);
         counterWithTags.increment(100D);
-        Assert.assertEquals(counterWithTags.count(), 200D);
+        Assert.assertEquals(counterWithTags.count(), 300D);
     }
 
     @Test
