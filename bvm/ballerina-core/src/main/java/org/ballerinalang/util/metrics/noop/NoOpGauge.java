@@ -19,16 +19,15 @@ package org.ballerinalang.util.metrics.noop;
 
 import org.ballerinalang.util.metrics.AbstractMetric;
 import org.ballerinalang.util.metrics.Gauge;
+import org.ballerinalang.util.metrics.MetricId;
 
 /**
  * Implementation of No-Op {@link Gauge}.
  */
 public class NoOpGauge extends AbstractMetric<Gauge> implements Gauge {
 
-    private final Gauge.Builder builder;
-
-    public NoOpGauge(Gauge.Builder builder) {
-        super(builder);
+    public NoOpGauge(MetricId id) {
+        super(id);
         this.builder = builder;
     }
 

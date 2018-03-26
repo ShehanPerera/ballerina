@@ -28,12 +28,32 @@ public class PrometheusMetricProviderTest {
 
     @Test
     public void testCounterTags() {
-        Counter counter = Counter.builder().name("test_counter_tags").description("Test Counter Tags")
-                .register(metricRegistry);
+        Counter counter = Counter.builder().name("test_tags_counter").description("Test Counter Tags")
+                .tagKeys("key").register(metricRegistry);
+        counter.increment();
         Map<String, String> tags = new HashMap<>();
         tags.put("key", "value");
         counter.tags(tags).increment(100D);
-        counter.tags("key", "value").increment(100D);
+        counter.tags("value").increment(100D);
+        Counter counterWithTags = counter.tags(tags);
+        counterWithTags.increment(100D);
+        Assert.assertEquals(counterWithTags.count(), 300D);
+    }
+
+    @Test
+    public void testCounterTagsFailures() {
+        Counter counter = Counter.builder().name("test_tag_fail_counter").description("Test Counter Tags Failures")
+                .tagKeys("key").register(metricRegistry);
+        Map<String, String> tags = new HashMap<>();
+        tags.put("key", "value");
+        counter.tags(tags).increment(100D);
+        try {
+            counter.tags("value", "value2").increment(100D);
+            Assert.fail("Different number of tag values are not allowed");
+        } catch (IllegalArgumentException e) {
+            // Test successful
+        }
+        counter.tags("value").increment(100D);
         Counter counterWithTags = counter.tags(tags);
         counterWithTags.increment(100D);
         Assert.assertEquals(counterWithTags.count(), 300D);

@@ -37,6 +37,7 @@
 
     <modules>
         <module>modules/prometheus-metrics-provider</module>
+        <module>modules/prometheus-http-server</module>
     </modules>
 
 </project>

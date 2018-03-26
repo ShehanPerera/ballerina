@@ -30,10 +30,8 @@ public final class Tag {
     private final String value;
 
     public Tag(String key, String value) {
-        requireNonNull(key);
-        requireNonNull(value);
-        this.key = key;
-        this.value = value;
+        this.key = requireNonNull(key);
+        this.value = requireNonNull(value);
     }
 
     static Tag of(String key, String value) {

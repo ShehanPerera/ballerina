@@ -17,6 +17,8 @@
  */
 package org.ballerinalang.util.metrics;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -28,7 +30,19 @@ import java.util.Map;
 public interface Metric<M> {
 
     /**
-     * Add tags for this metric.
+     * @return A unique combination of name and tags
+     */
+    MetricId getId();
+
+    /**
+     * Get tag key names used in the metric.
+     *
+     * @return A list of tag key names
+     */
+    List<String> getTagKeys();
+
+    /**
+     * Add tags for this metric. Tag keys must match the key defined in the metric
      *
      * @param tags A map of key value pairs to be used as tags
      * @return Metric instance
@@ -36,20 +50,20 @@ public interface Metric<M> {
     M tags(Map<String, String> tags);
 
     /**
-     * Add tags for this metric.
+     * Add tag values for this metric.
      *
-     * @param tags A list of key value pairs to be used as tags
+     * @param tagValues A list of key value pairs to be used as tags
      * @return Metric instance
      */
-    M tags(List<Tag> tags);
+    M tags(List<String> tagValues);
 
     /**
-     * Add tags for this metric.
+     * Add tag values for this metric.
      *
-     * @param keyValues Key value pairs to be used as tags
+     * @param tagValues Tag values to be used for the corresponding tag keys in the metric
      * @return Metric instance
      */
-    M tags(String... keyValues);
+    M tags(String... tagValues);
 
     /**
      * Builder for metrics.
@@ -59,11 +73,11 @@ public interface Metric<M> {
      */
     abstract class Builder<B extends Builder<B, M>, M extends Metric> {
 
-        // Name is used to uniquely identify metrics
-        private String name = "";
-
+        // Name and tags are used to uniquely identify metrics
+        private String name;
+        private List<Tag> tags;
         // Description of the metric
-        private String description = "";
+        private String description;
 
         /**
          * Set the name of the metric. Required.
@@ -81,12 +95,63 @@ public interface Metric<M> {
             return (B) this;
         }
 
+//        /**
+//         * Set the tag keys. Optional.
+//         */
+//        public B tagKeys(String... tagKeys) {
+//            this.tagKeys = tagKeys;
+//            return (B) this;
+//        }
+
+
+        @Override
+        public B tags(Map<String, String> tags) {
+            List<String> tagValues = new ArrayList<>(tags.size());
+            for (String key : tagKeys) {
+                tagValues.add(tags.get(key));
+            }
+            return  tags(tagValues);
+        }
+
+        @Override
+        public B tags(List<String> tagValues) {
+            return tags(tagValues.toArray(new String[tagValues.size()]));
+        }
+
+        @Override
+        public B tags(String... tagValues) {
+            if (child) {
+                throw new IllegalStateException("Cannot add tags to a child metric");
+            }
+            // The tag values count must match the number of tag keys defined when building metric
+            if (tagKeys.size() != tagValues.length) {
+                throw new IllegalArgumentException("Incorrect number of tag values");
+            }
+            for (String value : tagValues) {
+                if (value == null) {
+                    throw new IllegalArgumentException("Tag value cannot be null.");
+                }
+            }
+            List<String> key = Arrays.asList(tagValues);
+            return children.compute(key, (keys, child) -> {
+                if (child == null) {
+                    child = createNewChild();
+                    ((AbstractMetric) child).child = true;
+                }
+                return child;
+            });
+        }
+
         public String getName() {
             return name;
         }
 
         public String getDescription() {
             return description;
+        }
+
+        public String[] getTagKeys() {
+            return tagKeys != null ? Arrays.copyOf(tagKeys, tagKeys.length) : null;
         }
 
         /**

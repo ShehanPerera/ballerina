@@ -18,13 +18,16 @@
 package org.ballerinalang.util.metrics;
 
 import org.ballerinalang.util.metrics.noop.NoOpMetricProvider;
-import org.ballerinalang.util.metrics.spi.MetricExtension;
 import org.ballerinalang.util.metrics.spi.MetricProvider;
+import org.ballerinalang.util.metrics.spi.MetricRegistryListener;
 
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 
 /**
@@ -34,17 +37,22 @@ public class MetricRegistry {
 
     private final MetricProvider metricProvider;
     private final ConcurrentMap<String, Metric> metrics;
+    private final List<MetricRegistryListener> listeners;
 
     /**
-     * Lazy initialization for Default {@link MetricRegistry}. Initialize all {@link MetricExtension}s.
+     * Lazy initialization for Default {@link MetricRegistry}. Initialize all {@link MetricRegistryListener}s.
      */
     private static class LazyHolder {
         static final MetricRegistry REGISTRY = new MetricRegistry();
 
         static {
-            // Load extensions
-            ServiceLoader<MetricExtension> extensionServiceLoader = ServiceLoader.load(MetricExtension.class);
-            extensionServiceLoader.forEach(metricExtension -> metricExtension.initialize());
+            // Load MetricRegistry Listeners
+            ServiceLoader<MetricRegistryListener> metricRegistryListenerLoader
+                    = ServiceLoader.load(MetricRegistryListener.class);
+            metricRegistryListenerLoader.forEach(metricRegistryListener -> {
+                REGISTRY.addListener(metricRegistryListener);
+                metricRegistryListener.initialize();
+            });
         }
     }
 
@@ -77,6 +85,7 @@ public class MetricRegistry {
     public MetricRegistry(MetricProvider metricProvider) {
         this.metrics = new ConcurrentHashMap<>();
         this.metricProvider = metricProvider;
+        this.listeners = new CopyOnWriteArrayList<>();
     }
 
     private <M extends Metric> M getMetric(Class<M> metricClass, String name) throws MetricNotFoundException {
@@ -120,6 +129,7 @@ public class MetricRegistry {
                     throw new IllegalArgumentException(name + " is already used for a different type of metric");
                 }
             }
+            onMetricAdded(name, newMetric);
             return (M) newMetric;
         }
     }
@@ -132,6 +142,65 @@ public class MetricRegistry {
      */
     public boolean remove(String name) {
         final Metric metric = metrics.remove(name);
-        return metric != null;
+        if (metric != null) {
+            onMetricRemoved(name, metric);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Adds a {@link MetricRegistryListener} to a collection of listeners that will be notified on
+     * metric creation.
+     *
+     * @param listener the listener that will be notified
+     */
+    public void addListener(MetricRegistryListener listener) {
+        listeners.add(listener);
+
+        for (Map.Entry<String, Metric> entry : metrics.entrySet()) {
+            notifyListenerOfAddedMetric(listener, entry.getValue(), entry.getKey());
+        }
+    }
+
+    /**
+     * Removes a {@link MetricRegistryListener} from this registry's collection of listeners.
+     *
+     * @param listener the listener that will be removed
+     */
+    public void removeListener(MetricRegistryListener listener) {
+        listeners.remove(listener);
+    }
+
+    private void onMetricAdded(String name, Metric metric) {
+        for (MetricRegistryListener listener : listeners) {
+            notifyListenerOfAddedMetric(listener, metric, name);
+        }
+    }
+
+    private void notifyListenerOfAddedMetric(MetricRegistryListener listener, Metric metric, String name) {
+        if (metric instanceof Counter) {
+            listener.onCounterAdded(name, (Counter) metric);
+        } else if (metric instanceof Gauge) {
+            listener.onGaugeAdded(name, (Gauge) metric);
+        } else {
+            throw new IllegalArgumentException("Unknown metric type: " + metric.getClass());
+        }
+    }
+
+    private void onMetricRemoved(String name, Metric metric) {
+        for (MetricRegistryListener listener : listeners) {
+            notifyListenerOfRemovedMetric(name, metric, listener);
+        }
+    }
+
+    private void notifyListenerOfRemovedMetric(String name, Metric metric, MetricRegistryListener listener) {
+        if (metric instanceof Counter) {
+            listener.onCounterRemoved(name);
+        } else if (metric instanceof Gauge) {
+            listener.onGaugeRemoved(name);
+        } else {
+            throw new IllegalArgumentException("Unknown metric type: " + metric.getClass());
+        }
     }
 }
